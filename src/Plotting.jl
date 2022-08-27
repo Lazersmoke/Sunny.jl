@@ -1,7 +1,7 @@
 """Plotting functions for lattices and spins on lattices.
 """
 
-function plot_lattice!(ax, lattice::Lattice; colors=:Set1_9, markersize=200, linecolor=:grey, linewidth=1.0, kwargs...)
+function plot_lattice!(ax, lattice::Lattice; colors=:Set1_9, markersize=10, linecolor=:grey, linewidth=1.0, kwargs...)
     unique_types = unique(lattice.types)
     colors = WGLMakie.resample_cmap(colors, 9)
 
@@ -19,7 +19,7 @@ end
 
 function _setup_scene(; show_axis=false)
     fig = WGLMakie.Figure()
-    ax = WGLMakie.LScene(fig[1, 1], show_axis=show_axis)
+    ax = WGLMakie.LScene(fig[1,1], show_axis=show_axis)
     return fig, ax
 end
 
@@ -27,7 +27,7 @@ function plot_lattice(lattice::Lattice; kwargs...)
     fig, ax = _setup_scene()
     plot_lattice!(ax, lattice; kwargs...)
     # TODO: Markers are often way too big.
-    fig[1, 2] = WGLMakie.Legend(fig, ax, "Species")
+    WGLMakie.Legend(fig[1,2], ax, "Species")
     fig
 end
 
@@ -221,7 +221,11 @@ function plot_cells!(ax, lattice::Lattice; color=:grey, linewidth=1.0, kwargs...
         end
     end
 
-    WGLMakie.linesegments!(ax, pts; color=color, linewidth=linewidth)
+    # WGLMakie.linesegments!(ax, pts; color=color, linewidth=linewidth)
+    numpoints = length(pts)
+    for i ∈ 1:numpoints
+        WGLMakie.lines!(ax, [pts[i], pts[mod1(i+1, numpoints)]])
+    end
 end
 
 function plot_spins(lat::Lattice, dipoles::Array{Vec3, 4}; linecolor=:grey, arrowcolor=:red,

@@ -100,9 +100,9 @@ export WangLandau, spherical_cap_update, init_bounded!, run!
 include("SunnyGfx/SunnyGfx.jl")
 export view_crystal, offline_viewers
 
-# GLMakie and MPI are optional dependencies
+# WGLMakie and MPI are optional dependencies
 function __init__()
-    @require GLMakie="e9467ef8-e4e7-5192-8a1a-b1aee30e663a" begin
+    @require WGLMakie="276b4fcb-3e11-5398-bf8b-a0c2d153d008" begin
         include("Plotting.jl")
         export plot_lattice, plot_spins, plot_bonds, plot_all_bonds
         export anim_integration, live_integration, live_langevin_integration

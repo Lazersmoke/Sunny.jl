@@ -308,8 +308,8 @@ plot_spins(sys_small; arrowlength=2.5, linewidth=0.75, arrowsize=1.5)
 # limited by the system size. We will therefore extend the system periodically 
 # into a larger `System`:
 
-sys_big = extend_periodically(sys_small, (4,4,1))  # Multiply first and second lattice dimensions by 4
-plot_spins(sys_big; arrowlength=2.5, linewidth=0.75, arrowsize=1.5)
+sys = extend_periodically(sys_small, (4,4,1))  # Multiply first and second lattice dimensions by 4
+plot_spins(sys; arrowlength=2.5, linewidth=0.75, arrowsize=1.5)
 
 # ## Calculating the structure factor
 # To get a good equilibrium sample, we will next thermalize the system at a low
@@ -323,46 +323,28 @@ kT = 0.5 * Sunny.meV_per_K                  # Set temperature meV equivalent of 
 integrator = LangevinHeunP(kT, λ, Δt)       # Build integrator with these parameters
 
 for _ in 1:5nsteps                          # Run for sufficient time to thermalize
-    step!(sys_big, integrator)
+    step!(sys, integrator)
 end;
 
-#src # The spins in our sample should now be sampled appropriately at 0.5 K and we
-#src # can proceed with the calculation by calling `DynamicStructureFactor`. Three
-#src # keyword parameters are required to determine the ω information that will be
-#src # calculated: an integrator step size, the number of ωs to resolve, and the
-#src # maximum ω to resolve. For the time step, twice the value used for the Langevin
-#src # integrator is usually a good choice.
-#src 
-#src sf = DynamicStructureFactor(sys; Δt=2Δt, nω=120, ωmax=7.5)
-#src 
-#src # `sf` currently contains dynamical structure data generated from a single
-#src # sample. Additional samples can be added by generating a new spin configuration
-#src # and calling `add_sample!`:
-#src 
-#src for _ in 1:2
-#src     for _ in 1:nsteps            # Generate a new sample spin configuration
-#src         step!(sys, integrator)
-#src     end
-#src     add_sample!(sf, sys)         # Accumulate the sample into `sf`
-#src end
+# The spins in our sample should now represent a good sample at 0.5 K. We can
+# proceed with the calculation by calling `DynamicStructureFactor`. Three
+# keyword parameters are required to determine the ω information that will be
+# calculated: an integrator step size, the number of ωs to resolve, and the
+# maximum ω to resolve. For the time step, twice the value used for the Langevin
+# integrator is usually a good choice.
 
+sf = DynamicStructureFactor(sys; Δt=2Δt, nω=120, ωmax=7.5);
 
+# `sf` currently contains dynamical structure data generated from a single
+# sample. Additional samples can be added by generating a new spin configuration
+# and calling `add_sample!`:
 
-#src begin
-#src     sf = StaticStructureFactor(sys_big)
-#src     qs = all_exact_wave_vectors(sf)
-#src     sf_raw = static_intensities(sf, qs, :trace)
-#src end
-#src 
-#src 
-#src begin
-#src     fig = Figure(; resolution=(1500,300))
-#src     for i in axes(sf_raw, 3)
-#src         figidx = fldmod1(i,4)
-#src         xidx, yidx = figidx
-#src         ax = Axis(fig[xidx, 2yidx-1]; title="qz = $(qs[1,1,i][3])", aspect=1)
-#src         hm = heatmap!(ax, sf_raw[:,:,i], colorrange = (0, 2000))
-#src         Colorbar(fig[xidx, 2yidx], hm)
-#src     end
-#src     fig
-#src end
+for _ in 1:2
+    for _ in 1:nsteps            # Generate a new sample spin configuration
+        step!(sys, integrator)
+    end
+    add_sample!(sf, sys)         # Accumulate the sample into `sf`
+end;
+
+# ## Accessing structure factor data 
+# The basic function for accessing intensity data is  

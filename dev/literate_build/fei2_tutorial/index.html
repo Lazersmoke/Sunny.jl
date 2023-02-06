@@ -62,7 +62,7 @@ Allowed exchange matrix: | A  F  E |
                          | F  B  D |
                          | E  D  C |
 
-</code></pre><p>The allowed <span>$g$</span>-tensor is given as a 3×3 matrix. The allowed single-ion anisotropy is given as a linear combination of Stevens operators. The latter correspond to polynomials of the spin operators, as we will describe below.</p><p>The allowed exchange interactions are given as a 3×3 matrix for representative bonds. The notation <code>Bond(i, j, n)</code> indicates a bond between atom indices <code>i</code> and <code>j</code>, with cell offset <code>n</code>. In the general case, it will be necessary to associate atom indices with their positions in the unit cell; these can be viewed with <code>display(cryst)</code>. Note that the order of the pair <span>$(i, j)$</span> is significant if the exchange tensor contains antisymmetric Dzyaloshinskii–Moriya (DM) interactions.</p><p>As an example, <code>Bond(1, 1, [1,0,0])</code> involves an offset of one unit cell in the direction of the first lattice vector. In the case of FeI2, this is one of the 6 nearest-neighbor Fe-Fe bonds on the triangular lattice.</p><h3 id="Assigning-interactions-and-anisotropies"><a class="docs-heading-anchor" href="#Assigning-interactions-and-anisotropies">Assigning interactions and anisotropies</a><a id="Assigning-interactions-and-anisotropies-1"></a><a class="docs-heading-anchor-permalink" href="#Assigning-interactions-and-anisotropies" title="Permalink"></a></h3><p>The function <a href="../../library/#Sunny.set_exchange!-Union{Tuple{N}, Tuple{System{N}, Any, Bond}} where N"><code>set_exchange!</code></a> assigns an exchange interaction to a bond, and will propagate the interaction to all symmetry-equivalent bonds in the unit cell. Below we define the FeI2 interactions following Ref. [1].</p><pre><code class="language-julia hljs">J1pm   = -0.236
+</code></pre><p>The allowed <span>$g$</span>-tensor is expressed as a 3×3 matrix in the free coefficients <code>A</code>, <code>B</code>, ... The allowed single-ion anisotropy is expressed as a linear combination of Stevens operators. The latter correspond to polynomials of the spin operators, as we will describe below.</p><p>The allowed exchange interactions are given as a 3×3 matrix for representative bonds. The notation <code>Bond(i, j, n)</code> indicates a bond between atom indices <code>i</code> and <code>j</code>, with cell offset <code>n</code>. In the general case, it will be necessary to associate atom indices with their positions in the unit cell; these can be viewed with <code>display(cryst)</code>. Note that the order of the pair <span>$(i, j)$</span> is significant if the exchange tensor contains antisymmetric Dzyaloshinskii–Moriya (DM) interactions.</p><p>As an example, <code>Bond(1, 1, [1,0,0])</code> involves an offset of one unit cell in the direction of the first lattice vector. In the case of FeI2, this is one of the 6 nearest-neighbor Fe-Fe bonds on the triangular lattice.</p><h3 id="Assigning-interactions-and-anisotropies"><a class="docs-heading-anchor" href="#Assigning-interactions-and-anisotropies">Assigning interactions and anisotropies</a><a id="Assigning-interactions-and-anisotropies-1"></a><a class="docs-heading-anchor-permalink" href="#Assigning-interactions-and-anisotropies" title="Permalink"></a></h3><p>The function <a href="../../library/#Sunny.set_exchange!-Union{Tuple{N}, Tuple{System{N}, Any, Bond}} where N"><code>set_exchange!</code></a> assigns an exchange interaction to a bond, and will propagate the interaction to all symmetry-equivalent bonds in the unit cell. Below we define the FeI2 interactions following Ref. [1].</p><pre><code class="language-julia hljs">J1pm   = -0.236
 J1pmpm = -0.161
 J1zpm  = -0.261
 J2pm   = 0.026
@@ -110,38 +110,38 @@ for kT in range(E0, 0, nsteps)
     step!(sys, langevin)
 end</code></pre><p>The annealed configuration can be visualized with <code>plot_spins</code>.</p><pre><code class="language-julia hljs">plot_spins(sys; arrowlength=2.5, linewidth=0.75, arrowsize=1.5)</code></pre><p><img src="../fei2_tutorial-28.png" alt/></p><p>There are likely to be defects in the magnetic order because <code>nsteps = 10_000</code> is a relatively fast quench. Repeating the annealing procedure with, say, <code>nsteps = 100_000</code> would likely yield the correct magnetic order. Let&#39;s instead continue with the imperfect one.</p><p>The zero-field energy-minimizing magnetic structure of FeI<span>$_2$</span> is known to be single-<span>$q$</span>. If annealing were perfect, then spontaneous symmetry breaking would select one of <span>$±q = [0, -1/4, 1/4]$</span>, <span>$[1/4, 0, 1/4]$</span>, or <span>$[-1/4,1/4,1/4]$</span>. Let us check which modes appear in the static structure factor intensity (for each sublattice independently).</p><pre><code class="language-julia hljs">print_dominant_wavevectors(sys)</code></pre><pre><code class="nohighlight hljs">Dominant wavevectors for spin sublattices:
 
-    [-1/4, 1/4, 0]         12.08% weight
-    [1/4, -1/4, 0]         12.08%
-    [1/4, 0, 0]            10.45%
-    [-1/4, 0, 0]           10.45%
-    [1/4, 0, 1/2]          10.08%
-    [-1/4, 0, 1/2]         10.08%
-    [-1/4, 1/4, 1/2]        7.58%
-    [1/4, -1/4, 1/2]        7.58%
-    [-1/4, 1/4, 1/4]        1.08%
-    [1/4, -1/4, -1/4]       1.08%
-    [0, 1/4, 1/2]           0.92%
+    [0, -1/4, 1/4]         14.36% weight
+    [0, 1/4, -1/4]         14.36%
+    [1/4, 0, 1/4]           6.82%
+    [-1/4, 0, -1/4]         6.82%
+    [1/4, 0, 0]             6.40%
+    [-1/4, 0, 0]            6.40%
+    [0, 1/4, 1/2]           3.70%
+    [0, -1/4, 1/2]          3.70%
+    [-1/4, 1/4, 1/4]        3.20%
+    [1/4, -1/4, -1/4]       3.20%
+    [0, 1/4, 1/4]           2.84%
     ...                     ...
 </code></pre><p>If the shape of the magnetic unit supercell is known, then smaller systems can be much easier to anneal. Given a list of <span>$q$</span> modes, Sunny can suggest an appropriate magnetic supercell, in units of the crystal lattice vectors.</p><pre><code class="language-julia hljs">suggest_magnetic_supercell([[0, -1/4, 1/4]], sys.latsize)</code></pre><pre><code class="nohighlight hljs">Suggested magnetic supercell in multiples of lattice vectors:
 
     A = [1 0 0; 0 1 -2; 0 1 2]
 
 for wavevectors [[0, -1/4, 1/4]].
-</code></pre><p>Reshape the system to the suggested supercell volume.</p><pre><code class="language-julia hljs">A = [1 0 0; 0 1 -2; 0 1 2]
-sys_supercell = reshape_volume(sys, A)</code></pre><pre><code class="nohighlight hljs">System [SU(3)]
-Cell size 2, Lattice size (1, 1, 2)
-</code></pre><p>Annealing now becomes much easier.</p><pre><code class="language-julia hljs">for kT in range(E0, 0, nsteps)
+</code></pre><p>Reshape the system to the suggested supercell volume and anneal.</p><pre><code class="language-julia hljs">A = [1 0 0; 0 1 -2; 0 1 2]
+sys_supercell = reshape_volume(sys, A)
+
+for kT in range(E0, 0, nsteps)
     langevin.kT = kT
     step!(sys_supercell, langevin)
 end
-plot_spins(sys_supercell; arrowlength=2.5, linewidth=0.75, arrowsize=1.5)</code></pre><p><img src="../fei2_tutorial-36.png" alt/></p><p>Now periodically extend the system volume to <span>$8×8×6$</span> unit cells.</p><pre><code class="language-julia hljs">sys_large = reshape_volume(sys_supercell, diagm([8,8,6]))
-plot_spins(sys_large; arrowlength=2.5, linewidth=0.75, arrowsize=1.5)</code></pre><p><img src="../fei2_tutorial-38.png" alt/></p><h2 id="Calculating-the-structure-factor"><a class="docs-heading-anchor" href="#Calculating-the-structure-factor">Calculating the structure factor</a><a id="Calculating-the-structure-factor-1"></a><a class="docs-heading-anchor-permalink" href="#Calculating-the-structure-factor" title="Permalink"></a></h2><p>Let us now collect statistical data at a fixed temperature of 0.5K. We can use Langevin dynamics to thermalize the system. Note that the required number of time-steps will vary significantly for different systems and thermodynamic conditions.</p><pre><code class="language-julia hljs">nsteps = round(Int, 2.0/Δt)     # System-dependent estimate
+plot_spins(sys_supercell; arrowlength=2.5, linewidth=0.75, arrowsize=1.5)</code></pre><p><img src="../fei2_tutorial-34.png" alt/></p><p>Now periodically extend the system volume to <span>$8×8×6$</span> unit cells.</p><pre><code class="language-julia hljs">sys_large = reshape_volume(sys_supercell, diagm([8,8,6]))
+plot_spins(sys_large; arrowlength=2.5, linewidth=0.75, arrowsize=1.5)</code></pre><p><img src="../fei2_tutorial-36.png" alt/></p><h2 id="Calculating-the-structure-factor"><a class="docs-heading-anchor" href="#Calculating-the-structure-factor">Calculating the structure factor</a><a id="Calculating-the-structure-factor-1"></a><a class="docs-heading-anchor-permalink" href="#Calculating-the-structure-factor" title="Permalink"></a></h2><p>Apply the Langevin dynamics to thermalize the system to 0.5K. Note that the number of time-steps required to thermalize may vary significantly for different systems and thermodynamic conditions.</p><pre><code class="language-julia hljs">nsteps = round(Int, 2.0/Δt)     # System-dependent estimate
 kT = 0.5 * meV_per_K            # 0.5K in units of meV
 langevin.kT = kT
 
 for _ in 1:5nsteps
     step!(sys_large, langevin)
-end</code></pre><p>Using our equilibrated system, we construct <a href="../../library/#Sunny.DynamicStructureFactor-Tuple{System}"><code>DynamicStructureFactor</code></a>. Three keyword parameters are required to determine the ω information that will be calculated: an integration step size, the number of ωs to resolve, and the maximum ω to resolve. For the time step, twice the value used for the Langevin integrator is usually a good choice.</p><pre><code class="language-julia hljs">sf = DynamicStructureFactor(sys_large; Δt=2Δt, nω=120, ωmax=7.5);</code></pre><p><code>sf</code> currently contains dynamical structure data generated from a single sample. Additional samples can be added by generating a new spin configuration and calling <code>add_sample!</code>:</p><pre><code class="language-julia hljs">for _ in 1:2
+end</code></pre><p>With our equilibrated system, we can begin to measure the <a href="../../library/#Sunny.DynamicStructureFactor-Tuple{System}"><code>DynamicStructureFactor</code></a>. Three keyword parameters are required to determine the ω information that will be calculated: an integration step size, the number of ωs to resolve, and the maximum ω to resolve. For the time step, twice the value used for the Langevin integrator is usually a good choice.</p><pre><code class="language-julia hljs">sf = DynamicStructureFactor(sys_large; Δt=2Δt, nω=120, ωmax=7.5);</code></pre><p><code>sf</code> currently contains dynamical structure data generated from a single sample. Additional samples can be added by generating a new spin configuration and calling <code>add_sample!</code>:</p><pre><code class="language-julia hljs">for _ in 1:2
     for _ in 1:nsteps               # Generate a new sample spin configuration
         step!(sys_large, langevin)
     end
@@ -154,7 +154,7 @@ ax = Axis(fig[1,1]; xlabel=&quot;meV&quot;, ylabel=&quot;Intensity&quot;)
 l1 = lines!(ax, ωs(sf), is[1,:])
 l2 = lines!(ax, ωs(sf), is[2,:])
 Legend(fig[1,2], [l1, l2], [&quot;(0,0,0)&quot;, &quot;(π,π,π)&quot;])
-fig</code></pre><p><img src="../fei2_tutorial-46.png" alt/></p><p>Note that we provided the optional keyword <code>kT</code> to <code>intensities</code> to enable Sunny to apply a classical-to-quantum rescaling of intensities.</p><p>Frequently we want to extract energy intensities along lines that connect special wave vectors. Sunny provides a function <code>connected_path</code> to makes this easy. The density of sample points can be tuned with a density argument.</p><pre><code class="language-julia hljs">points = [[0.0, 0.0, 0.0],  # List of wave vectors that define a path
+fig</code></pre><p><img src="../fei2_tutorial-44.png" alt/></p><p>Note that we provided the optional keyword <code>kT</code> to <code>intensities</code> to enable Sunny to apply a classical-to-quantum rescaling of intensities.</p><p>Frequently we want to extract energy intensities along lines that connect special wave vectors. Sunny provides a function <code>connected_path</code> to makes this easy. The density of sample points can be tuned with a density argument.</p><pre><code class="language-julia hljs">points = [[0.0, 0.0, 0.0],  # List of wave vectors that define a path
           [1.0, 0.0, 0.0],
           [0.0, 1.0, 0.0],
           [0.5, 0.0, 0.0],
@@ -180,7 +180,7 @@ ax = Axis(fig[1,1];
     xticklabelsize=12,
 )
 heatmap!(ax, 1:size(is,1), ωs(sf), is; colorrange=(0.0, 0.5))
-fig</code></pre><p><img src="../fei2_tutorial-48.png" alt/></p><p>Often it is useful to plot cuts across multiple wave vectors but at a single energy.</p><pre><code class="language-julia hljs">npoints = 60
+fig</code></pre><p><img src="../fei2_tutorial-46.png" alt/></p><p>Often it is useful to plot cuts across multiple wave vectors but at a single energy.</p><pre><code class="language-julia hljs">npoints = 60
 qvals = range(-2.0, 2.0, length=npoints)
 qs = [[a, b, 0.0] for a in qvals, b in qvals]
 forfactors = [FormFactor(1, &quot;Fe2&quot;)]
@@ -198,7 +198,7 @@ ax = Axis(fig[1,1]; title=&quot;ω=$ω meV&quot;, aspect=true)
 hidedecorations!(ax); hidespines!(ax)
 hm = heatmap!(ax, is[:,:,ωidx])
 Colorbar(fig[1,2], hm)
-fig</code></pre><p><img src="../fei2_tutorial-50.png" alt/></p><p>Note that Brillouin zones appear &quot;skewed&quot;. This is a consequence of the fact that our reciprocal lattice vectors are not orthogonal. It is often useful to express our wave vectors in terms of an orthogonal basis, where each basis element is specified as a linear combination of reciprocal lattice vectors. For our crystal, with reciprocal vectors <span>$a^*$</span>, <span>$b^*$</span> and <span>$c^*$</span>, we can define an orthogonal basis by taking <span>$\hat{a}^* = 0.5(a^* + b^*)$</span>, <span>$\hat{b}^*=a^* - b^*$</span>, and <span>$\hat{c}^*=c^*$</span>. Below, we map <code>qs</code> to wavevectors <code>ks</code> in the new coordinate system and get their intensities.</p><pre><code class="language-julia hljs">A = [0.5  1.0 0.0;
+fig</code></pre><p><img src="../fei2_tutorial-48.png" alt/></p><p>Note that Brillouin zones appear &quot;skewed&quot;. This is a consequence of the fact that our reciprocal lattice vectors are not orthogonal. It is often useful to express our wave vectors in terms of an orthogonal basis, where each basis element is specified as a linear combination of reciprocal lattice vectors. For our crystal, with reciprocal vectors <span>$a^*$</span>, <span>$b^*$</span> and <span>$c^*$</span>, we can define an orthogonal basis by taking <span>$\hat{a}^* = 0.5(a^* + b^*)$</span>, <span>$\hat{b}^*=a^* - b^*$</span>, and <span>$\hat{c}^*=c^*$</span>. Below, we map <code>qs</code> to wavevectors <code>ks</code> in the new coordinate system and get their intensities.</p><pre><code class="language-julia hljs">A = [0.5  1.0 0.0;
      0.5 -1.0 0.0;
      0.0  0.0 1.0]
 ks = [A*q for q in qs]
@@ -214,7 +214,7 @@ ax = Axis(fig[1,1]; title=&quot;ω=$ω meV&quot;, aspect=true)
 hidedecorations!(ax); hidespines!(ax)
 hm = heatmap!(ax, is_ortho[:,:,ωidx])
 Colorbar(fig[1,2], hm)
-fig</code></pre><p><img src="../fei2_tutorial-52.png" alt/></p><p>Finally, we note that static structure factor data can be obtained from a dynamic structure factor with <code>static_intensities</code>:</p><pre><code class="language-julia hljs">is_static = static_intensities(sf, ks, :perp;
+fig</code></pre><p><img src="../fei2_tutorial-50.png" alt/></p><p>Finally, we note that static structure factor data can be obtained from a dynamic structure factor with <code>static_intensities</code>:</p><pre><code class="language-julia hljs">is_static = static_intensities(sf, ks, :perp;
     interpolation = :linear,
     kT,
     formfactors,
@@ -225,4 +225,4 @@ ax = Axis(fig[1,1]; title=&quot;Static Structure Factor&quot;, aspect=true)
 hidedecorations!(ax); hidespines!(ax)
 hm = heatmap!(ax, is_static)
 Colorbar(fig[1,2], hm)
-fig</code></pre><p><img src="../fei2_tutorial-54.png" alt/></p><hr/><p><em>This page was generated using <a href="https://github.com/fredrikekre/Literate.jl">Literate.jl</a>.</em></p></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../../quick-start/">« Quick Start</a><a class="docs-footer-nextpage" href="../../library/">Library API »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 0.27.24 on <span class="colophon-date" title="Monday 6 February 2023 06:16">Monday 6 February 2023</span>. Using Julia version 1.8.5.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
+fig</code></pre><p><img src="../fei2_tutorial-52.png" alt/></p><hr/><p><em>This page was generated using <a href="https://github.com/fredrikekre/Literate.jl">Literate.jl</a>.</em></p></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../../quick-start/">« Quick Start</a><a class="docs-footer-nextpage" href="../../library/">Library API »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 0.27.24 on <span class="colophon-date" title="Monday 6 February 2023 06:33">Monday 6 February 2023</span>. Using Julia version 1.8.5.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>

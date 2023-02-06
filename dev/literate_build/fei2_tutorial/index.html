@@ -22,7 +22,7 @@ Lattice params a=4.05, b=4.05, c=6.752, α=90°, β=90°, γ=120°
 Cell volume 95.92
 Type &#39;Fe&#39;, Wyckoff 1a (point group &#39;-3m.&#39;):
    1. [0, 0, 0]
-</code></pre><p>Importantly, <code>cryst</code> retains the spacegroup symmetry information for the full FeI2 crystal. This information will be used, for example, to propagate exchange interactions by symmetry.</p><h2 id="Spin-systems"><a class="docs-heading-anchor" href="#Spin-systems">Spin systems</a><a id="Spin-systems-1"></a><a class="docs-heading-anchor-permalink" href="#Spin-systems" title="Permalink"></a></h2><p>The FeI2 unit cell contains only a single Fe atom. To simulate a system of many spins, construct a <a href="../../library/#Sunny.System-Tuple{Crystal, Tuple{Int64, Int64, Int64}, Vector{SpinInfo}, Symbol}"><code>System</code></a>.</p><pre><code class="language-julia hljs">sys = System(cryst, (4,4,4), [SpinInfo(1,S=1)], :SUN)</code></pre><pre><code class="nohighlight hljs">System [SU(3)]
+</code></pre><p>Importantly, <code>cryst</code> retains the spacegroup symmetry information for the full FeI2 crystal. This information will be used, for example, to propagate exchange interactions by symmetry.</p><h2 id="Spin-systems"><a class="docs-heading-anchor" href="#Spin-systems">Spin systems</a><a id="Spin-systems-1"></a><a class="docs-heading-anchor-permalink" href="#Spin-systems" title="Permalink"></a></h2><p>The FeI2 unit cell contains only a single Fe atom. To simulate a system of many spins, construct a <a href="../../library/#Sunny.System-Tuple{Crystal, Tuple{Int64, Int64, Int64}, Vector{SpinInfo}, Symbol}"><code>System</code></a>.</p><pre><code class="language-julia hljs">sys = System(cryst, (4,4,4), [SpinInfo(1,S=1)], :SUN, seed=0)</code></pre><pre><code class="nohighlight hljs">System [SU(3)]
 Cell size 1, Lattice size (4, 4, 4)
 </code></pre><p>This system includes <span>$4×4×4$</span> unit cells, i.e. 64 spin moments, each with spin <span>$S=1$</span>. The default <span>$g$</span>-factor is 2, but this could be overriden with an additional argument to <a href="../../library/#Sunny.SpinInfo"><code>SpinInfo</code></a>. Recall that spin-1 has <span>$N=2S+1=3$</span> distinct angular momentum states. Because we selected <code>:SUN</code> mode, Sunny will simulate the dynamics of SU(3) coherent states, which includes both dipolar and quadrupolar fluctuations. For the more traditional dipole dynamics, use mode <code>:dipole</code> instead.</p><h2 id="Interactions-and-anisotropies"><a class="docs-heading-anchor" href="#Interactions-and-anisotropies">Interactions and anisotropies</a><a id="Interactions-and-anisotropies-1"></a><a class="docs-heading-anchor-permalink" href="#Interactions-and-anisotropies" title="Permalink"></a></h2><h3 id="Symmetry-analysis"><a class="docs-heading-anchor" href="#Symmetry-analysis">Symmetry analysis</a><a id="Symmetry-analysis-1"></a><a class="docs-heading-anchor-permalink" href="#Symmetry-analysis" title="Permalink"></a></h3><p>The next step is to add interactions to the system. The command <a href="../../library/#Sunny.print_symmetry_table-Tuple{Crystal, Any}"><code>print_symmetry_table</code></a> shows all symmetry-allowed interactions up to a distance cutoff.</p><pre><code class="language-julia hljs">print_symmetry_table(cryst, 8.0)</code></pre><pre><code class="nohighlight hljs">Site 1
 Type &#39;Fe&#39;, position [0, 0, 0], multiplicity 1
@@ -110,31 +110,33 @@ for kT in range(E0, 0, nsteps)
     step!(sys, langevin)
 end</code></pre><p>The annealed configuration can be visualized with <code>plot_spins</code>.</p><pre><code class="language-julia hljs">plot_spins(sys; arrowlength=2.5, linewidth=0.75, arrowsize=1.5)</code></pre><p><img src="../fei2_tutorial-28.png" alt/></p><p>There are likely to be defects in the magnetic order because <code>nsteps = 10_000</code> is a relatively fast quench. Repeating the annealing procedure with, say, <code>nsteps = 100_000</code> would likely yield the correct magnetic order. Let&#39;s instead continue with the imperfect one.</p><p>The zero-field energy-minimizing magnetic structure of FeI<span>$_2$</span> is known to be single-<span>$q$</span>. If annealing were perfect, then spontaneous symmetry breaking would select one of <span>$±q = [0, -1/4, 1/4]$</span>, <span>$[1/4, 0, 1/4]$</span>, or <span>$[-1/4,1/4,1/4]$</span>. Let us check which modes appear in the static structure factor intensity (for each sublattice independently).</p><pre><code class="language-julia hljs">print_dominant_wavevectors(sys)</code></pre><pre><code class="nohighlight hljs">Dominant wavevectors for spin sublattices:
 
-    [0, -1/4, 1/4]         14.36% weight
-    [0, 1/4, -1/4]         14.36%
-    [1/4, 0, 1/4]           6.82%
-    [-1/4, 0, -1/4]         6.82%
-    [1/4, 0, 0]             6.40%
-    [-1/4, 0, 0]            6.40%
-    [0, 1/4, 1/2]           3.70%
-    [0, -1/4, 1/2]          3.70%
-    [-1/4, 1/4, 1/4]        3.20%
-    [1/4, -1/4, -1/4]       3.20%
-    [0, 1/4, 1/4]           2.84%
+    [1/4, 0, 1/4]          24.06% weight
+    [-1/4, 0, -1/4]        24.06%
+    [1/4, 0, 1/2]           7.22%
+    [-1/4, 0, 1/2]          7.22%
+    [1/4, 0, 0]             5.05%
+    [-1/4, 0, 0]            5.05%
+    [0, -1/4, 1/4]          2.66%
+    [0, 1/4, -1/4]          2.66%
+    [0, 1/4, 1/4]           2.34%
+    [0, -1/4, -1/4]         2.34%
+    [-1/4, 1/4, 1/4]        1.97%
     ...                     ...
-</code></pre><p>If the shape of the magnetic unit supercell is known, then smaller systems can be much easier to anneal. Given a list of <span>$q$</span> modes, Sunny can suggest an appropriate magnetic supercell, in units of the crystal lattice vectors.</p><pre><code class="language-julia hljs">suggest_magnetic_supercell([[0, -1/4, 1/4]], sys.latsize)</code></pre><pre><code class="nohighlight hljs">Suggested magnetic supercell in multiples of lattice vectors:
+</code></pre><p>Let&#39;s break the symmetry by hand. Given a list of <span>$q$</span> modes, Sunny can suggest a magnetic supercell with appropriate periodicity. The result is printed in units of the crystal lattice vectors.</p><pre><code class="language-julia hljs">suggest_magnetic_supercell([[0, -1/4, 1/4]], sys.latsize)</code></pre><pre><code class="nohighlight hljs">Suggested magnetic supercell in multiples of lattice vectors:
 
     A = [1 0 0; 0 1 -2; 0 1 2]
 
 for wavevectors [[0, -1/4, 1/4]].
-</code></pre><p>Reshape the system to the suggested supercell volume and anneal.</p><pre><code class="language-julia hljs">A = [1 0 0; 0 1 -2; 0 1 2]
+</code></pre><p>After reshaping the system to the suggested supercell volume, it becomes much easier to relax the spin configuration.</p><pre><code class="language-julia hljs">A = [1 0 0; 0 1 -2; 0 1 2]
 sys_supercell = reshape_volume(sys, A)
 
-for kT in range(E0, 0, nsteps)
-    langevin.kT = kT
+randomize_spins!(sys_supercell)
+langevin.kT = 0
+for i in 1:nsteps
     step!(sys_supercell, langevin)
 end
-plot_spins(sys_supercell; arrowlength=2.5, linewidth=0.75, arrowsize=1.5)</code></pre><p><img src="../fei2_tutorial-34.png" alt/></p><p>Now periodically extend the system volume to <span>$8×8×6$</span> unit cells.</p><pre><code class="language-julia hljs">sys_large = reshape_volume(sys_supercell, diagm([8,8,6]))
+
+plot_spins(sys_supercell; arrowlength=2.5, linewidth=0.75, arrowsize=1.5)</code></pre><p><img src="../fei2_tutorial-34.png" alt/></p><p>Now periodically repeat the system volume to include <span>$8×8×4$</span> copies of the relaxed magnetic supercell.</p><pre><code class="language-julia hljs">sys_large = repeat_volume(sys_supercell, (8,8,4))
 plot_spins(sys_large; arrowlength=2.5, linewidth=0.75, arrowsize=1.5)</code></pre><p><img src="../fei2_tutorial-36.png" alt/></p><h2 id="Calculating-the-structure-factor"><a class="docs-heading-anchor" href="#Calculating-the-structure-factor">Calculating the structure factor</a><a id="Calculating-the-structure-factor-1"></a><a class="docs-heading-anchor-permalink" href="#Calculating-the-structure-factor" title="Permalink"></a></h2><p>Apply the Langevin dynamics to thermalize the system to 0.5K. Note that the number of time-steps required to thermalize may vary significantly for different systems and thermodynamic conditions.</p><pre><code class="language-julia hljs">nsteps = round(Int, 2.0/Δt)     # System-dependent estimate
 kT = 0.5 * meV_per_K            # 0.5K in units of meV
 langevin.kT = kT
@@ -225,4 +227,4 @@ ax = Axis(fig[1,1]; title=&quot;Static Structure Factor&quot;, aspect=true)
 hidedecorations!(ax); hidespines!(ax)
 hm = heatmap!(ax, is_static)
 Colorbar(fig[1,2], hm)
-fig</code></pre><p><img src="../fei2_tutorial-52.png" alt/></p><hr/><p><em>This page was generated using <a href="https://github.com/fredrikekre/Literate.jl">Literate.jl</a>.</em></p></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../../quick-start/">« Quick Start</a><a class="docs-footer-nextpage" href="../../library/">Library API »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 0.27.24 on <span class="colophon-date" title="Monday 6 February 2023 06:33">Monday 6 February 2023</span>. Using Julia version 1.8.5.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
+fig</code></pre><p><img src="../fei2_tutorial-52.png" alt/></p><hr/><p><em>This page was generated using <a href="https://github.com/fredrikekre/Literate.jl">Literate.jl</a>.</em></p></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../../quick-start/">« Quick Start</a><a class="docs-footer-nextpage" href="../../library/">Library API »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 0.27.24 on <span class="colophon-date" title="Monday 6 February 2023 18:20">Monday 6 February 2023</span>. Using Julia version 1.8.5.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>

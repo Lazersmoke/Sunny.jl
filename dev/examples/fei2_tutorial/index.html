@@ -107,18 +107,15 @@ for kT in range(2, 0, 20_000)
     step!(sys, langevin)
 end</code></pre><p>Because the quench was relatively fast, it is expected to find defects in the magnetic order. These can be visualized.</p><pre><code class="language-julia hljs">plot_spins(sys; arrowlength=2.5, linewidth=0.75, arrowsize=1.5)</code></pre><p><img src="../fei2_tutorial-31.png" alt/></p><p>If we had used a slower annealing procedure, involving 100,000 or more Langevin time-steps, it would very likely find the correct ground state. Instead, for purposes of illustration, let&#39;s analyze the imperfect spin configuration currently stored in <code>sys</code>.</p><p>An experimental probe of magnetic order order is the &#39;instantaneous&#39; or &#39;static&#39; structure factor intensity, available via <a href="../../library/#Sunny.InstantStructureFactor-Tuple{System}"><code>InstantStructureFactor</code></a> and related functions. To infer periodicities of the magnetic supercell, however, it is sufficient to look at the structure factor weights of spin sublattices individually, <em>without</em> phase averaging. This information is provided by <a href="../../library/#Sunny.print_wrapped_intensities-Union{Tuple{System{N}}, Tuple{N}} where N"><code>print_wrapped_intensities</code></a> (see the API documentation for a physical interpretation).</p><pre><code class="language-julia hljs">print_wrapped_intensities(sys)</code></pre><pre><code class="nohighlight hljs">Dominant wavevectors for spin sublattices:
 
-    [1/4, 0, 1/4]          18.41% weight
-    [-1/4, 0, -1/4]        18.41%
-    [1/4, 0, 0]             6.86%
-    [-1/4, 0, 0]            6.86%
-    [-1/4, 1/4, 1/4]        6.77%
-    [1/4, -1/4, -1/4]       6.77%
-    [-1/4, 1/4, 0]          6.37%
-    [1/4, -1/4, 0]          6.37%
-    [1/4, 0, 1/2]           2.46%
-    [-1/4, 0, 1/2]          2.46%
-    [-1/4, 1/4, 1/2]        1.66%
-    ...                     ...
+    [-1/4, 1/4, 1/4]       49.83% weight
+    [1/4, -1/4, -1/4]      49.83%
+    [1/2, 0, 1/2]           0.02%
+    [1/4, 1/4, 1/2]         0.02%
+    [-1/4, -1/4, 1/2]       0.02%
+    [0, 0, 1/4]             0.01%
+    [0, 0, -1/4]            0.01%
+    [-1/4, 1/2, 1/4]        0.01%
+    [1/4, 1/2, -1/4]        0.01%
 </code></pre><p>The above is consistent with known results. The zero-field energy-minimizing magnetic structure of FeI<span>$_2$</span> is single-<span>$q$</span>. If annealing were perfect, then spontaneous symmetry breaking would select one of <span>$±q = [0, -1/4, 1/4]$</span>, <span>$[1/4, 0, 1/4]$</span>, or <span>$[-1/4,1/4,1/4]$</span>.</p><p>Let&#39;s break the symmetry by hand. Given a list of <span>$q$</span> modes, Sunny can suggest a magnetic supercell with appropriate periodicity. The result is printed in units of the crystal lattice vectors.</p><pre><code class="language-julia hljs">suggest_magnetic_supercell([[0, -1/4, 1/4]], sys.latsize)</code></pre><pre><code class="nohighlight hljs">Suggested magnetic supercell in multiples of lattice vectors:
 
     [1 0 0; 0 1 -2; 0 1 2]
@@ -219,4 +216,4 @@ ax = Axis(fig[1,1]; title=&quot;Instantaneous Structure Factor&quot;, aspect=tru
 hidedecorations!(ax); hidespines!(ax)
 hm = heatmap!(ax, is_static)
 Colorbar(fig[1,2], hm)
-fig</code></pre><p><img src="../fei2_tutorial-58.png" alt/></p><hr/><p><em>This page was generated using <a href="https://github.com/fredrikekre/Literate.jl">Literate.jl</a>.</em></p></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../../quick-start/">« Quick Start</a><a class="docs-footer-nextpage" href="../powder_averaging/">Powder Averaging »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 0.27.24 on <span class="colophon-date" title="Thursday 2 March 2023 15:15">Thursday 2 March 2023</span>. Using Julia version 1.8.5.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
+fig</code></pre><p><img src="../fei2_tutorial-58.png" alt/></p><hr/><p><em>This page was generated using <a href="https://github.com/fredrikekre/Literate.jl">Literate.jl</a>.</em></p></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../../quick-start/">« Quick Start</a><a class="docs-footer-nextpage" href="../powder_averaging/">Powder Averaging »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 0.27.24 on <span class="colophon-date" title="Friday 3 March 2023 22:44">Friday 3 March 2023</span>. Using Julia version 1.8.5.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>

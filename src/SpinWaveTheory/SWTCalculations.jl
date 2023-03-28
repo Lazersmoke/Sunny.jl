@@ -380,6 +380,7 @@ ordered as x, y and z, and n corresponds to the number of modes.
 """
 function dssf(swt::SpinWaveTheory, qs)
     (; sys, chemical_positions, s̃_mat) = swt
+    qs = Vec3.(qs)
     Nm, Ns = length(sys.dipoles), sys.Ns[1] # number of magnetic atoms and dimension of Hilbert space
     Nf = sys.mode == :SUN ? Ns-1 : 1
     N  = Nf + 1
@@ -447,6 +448,7 @@ Computes the unpolarized inelastic neutron scattering intensities given a `SpinW
 # DD: incorporate existing SF utilties (e.g., form factor, polarization correction)
 function intensities(swt::SpinWaveTheory, qs, ωvals, η::Float64)
     (; sys) = swt
+    qs = Vec3.(qs)
     Nm, Ns = length(sys.dipoles), sys.Ns[1] # number of magnetic atoms and dimension of Hilbert space
     Nf = sys.mode == :SUN ? Ns-1 : 1
     nmodes  = Nf * Nm

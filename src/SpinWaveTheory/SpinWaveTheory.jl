@@ -53,14 +53,14 @@ function generate_local_sun_gens(sys :: System)
 
         U_mat = Matrix{ComplexF64}(undef, N, N)
 
-        for site = 1:Nₘ
-            U_mat[:, 1] = sys.coherents[1, 1, 1, site]
+        for matom = 1:Nₘ
+            U_mat[:, 1] = sys.coherents[1, 1, 1, matom]
             U_mat[:, 2:N] = nullspace(U_mat[:, 1]')
             @assert isapprox(U_mat * U_mat', I) "rotation matrix from (global frame to local frame) not unitary"
             for μ = 1:3
-                s̃_mat[:, :, μ, site] = Hermitian(U_mat' * s_mat[μ] * U_mat)
+                s̃_mat[:, :, μ, matom] = Hermitian(U_mat' * s_mat[μ] * U_mat)
             end
-            T̃_mat[:, :, site] = Hermitian(U_mat' * sys.interactions_union[site].aniso.matrep * U_mat)
+            T̃_mat[:, :, matom] = Hermitian(U_mat' * sys.interactions_union[matom].aniso.matrep * U_mat)
         end
 
     elseif sys.mode == :dipole
@@ -86,21 +86,21 @@ function generate_local_sun_gens(sys :: System)
         U_mat_2 = Matrix{ComplexF64}(undef, 2, 2)
         U_mat_N = Matrix{ComplexF64}(undef, N, N)
 
-        for site = 1:Nₘ
-            θ, ϕ = dipole_to_angles(sys.dipoles[1, 1, 1, site])
+        for matom = 1:Nₘ
+            θ, ϕ = dipole_to_angles(sys.dipoles[1, 1, 1, matom])
             U_mat_N[:] = exp(-1im * ϕ * s_mat_N[3]) * exp(-1im * θ * s_mat_N[2])
             U_mat_2[:] = exp(-1im * ϕ * s_mat_2[3]) * exp(-1im * θ * s_mat_2[2])
             @assert isapprox(U_mat_N * U_mat_N', I) "rotation matrix from (global frame to local frame) not unitary"
             @assert isapprox(U_mat_2 * U_mat_2', I) "rotation matrix from (global frame to local frame) not unitary"
             for μ = 1:3
-                s̃_mat[:, :, μ, site] = Hermitian(U_mat_2' * s_mat_2[μ] * U_mat_2)
+                s̃_mat[:, :, μ, matom] = Hermitian(U_mat_2' * s_mat_2[μ] * U_mat_2)
             end
             for ν = 1:5
-                Q̃_mat[:, :, ν, site] = Hermitian(U_mat_N' * Q_mat[ν] * U_mat_N)[1:2, 1:2]
+                Q̃_mat[:, :, ν, matom] = Hermitian(U_mat_N' * Q_mat[ν] * U_mat_N)[1:2, 1:2]
             end
 
             if !no_single_ion
-                T̃_mat[:, :, site] = Hermitian(U_mat_N' * sys.interactions_union[site].aniso.matrep * U_mat_N)[1:2, 1:2]
+                T̃_mat[:, :, matom] = Hermitian(U_mat_N' * sys.interactions_union[matom].aniso.matrep * U_mat_N)[1:2, 1:2]
             end
         end
     end
@@ -111,20 +111,19 @@ end
 """
 External constructor for `SpinWaveTheory`
 """
-function SpinWaveTheory(sys :: System, energy_ϵ :: Float64=1e-8, energy_tol :: Float64=1e-6;
-    magnetic_latsize = (1, 1, 1)
-)
+function SpinWaveTheory(sys :: System, energy_ϵ :: Float64=1e-8, energy_tol :: Float64=1e-6)
+    # Reshape into single unit cell
     magnetic_cellsize = cell_dimensions(sys) * diagm(collect(sys.latsize))
-    sys = reshape_geometry_aux(sys, magnetic_latsize, magnetic_cellsize)
+    sys = reshape_geometry_aux(sys, (1,1,1), magnetic_cellsize)
 
     s̃_mat, T̃_mat, Q̃_mat = generate_local_sun_gens(sys)
     maglat_basis = isnothing(sys.origin) ? diagm(ones(3)) : sys.origin.crystal.latvecs \ sys.crystal.latvecs
 
     Nₘ = length(sys.dipoles)
     chemical_positions = Vector{Vec3}(undef, Nₘ)
-    for site = 1:Nₘ
-        tmp_pos = maglat_basis * sys.crystal.positions[site]
-        chemical_positions[site] = Vec3(tmp_pos)
+    for matom = 1:Nₘ
+        tmp_pos = maglat_basis * sys.crystal.positions[matom]
+        chemical_positions[matom] = Vec3(tmp_pos)
     end
 
     # computes the reciprocal basis vectors of the magnetic lattice (units 2π/|a|)
@@ -148,7 +147,7 @@ function SpinWaveTheory(sys :: System, energy_ϵ :: Float64=1e-8, energy_tol :: 
 end
 
 """
-    k_chemical_to_k_magnetic
+    chemical_to_magnetic
 
 Convert the components of a wavevector from the original Brillouin zone (of the chemical lattice) to the reduced Brillouin zone (BZ)
 (of the magnetic lattice). \

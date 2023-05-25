@@ -73,13 +73,14 @@ function reshape_geometry_aux(sys::System{N}, new_latsize::NTuple{3, Int}, new_c
         new_dipoles          = zeros(Vec3, new_latsize..., new_na)
         new_coherents        = zeros(CVec{N}, new_latsize..., new_na)
 
+        new_scalar_buffers   = Array{Float64, 4}[]
         new_dipole_buffers   = Array{Vec3, 4}[]
         new_coherent_buffers = Array{CVec{N}, 4}[]
 
         new_ints = interactions_homog(origin)
 
         new_sys = System(nothing, origin.mode, new_cryst, new_latsize, new_Ns, new_κs, new_gs, new_ints, nothing,
-                    new_extfield, new_dipoles, new_coherents, new_dipole_buffers, new_coherent_buffers, origin.units, copy(sys.rng))
+                    new_extfield, new_dipoles, new_coherents, new_scalar_buffers, new_dipole_buffers, new_coherent_buffers, origin.units, copy(sys.rng))
     else
         new_cryst = reshape_crystal(origin.crystal, Mat3(new_cell_size))
 
@@ -91,13 +92,14 @@ function reshape_geometry_aux(sys::System{N}, new_latsize::NTuple{3, Int}, new_c
         new_dipoles          = zeros(Vec3, new_latsize..., new_na)
         new_coherents        = zeros(CVec{N}, new_latsize..., new_na)
 
+        new_scalar_buffers   = Array{Float64, 4}[]
         new_dipole_buffers   = Array{Vec3, 4}[]
         new_coherent_buffers = Array{CVec{N}, 4}[]
 
         new_ints = empty_interactions(new_na, N)
 
         new_sys = System(origin, origin.mode, new_cryst, new_latsize, new_Ns, new_κs, new_gs, new_ints, nothing,
-                    new_extfield, new_dipoles, new_coherents, new_dipole_buffers, new_coherent_buffers, origin.units, copy(sys.rng))
+                    new_extfield, new_dipoles, new_coherents, new_scalar_buffers, new_dipole_buffers, new_coherent_buffers, origin.units, copy(sys.rng))
 
         set_interactions_from_origin!(new_sys)
     end

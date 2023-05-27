@@ -282,7 +282,7 @@ end
 
 
 # Updates B in-place to hold negative energy gradient, -dE/ds, for each spin.
-function set_forces!(B, dipoles::Array{Vec3, 4}, sys::System{N}) where N
+function set_forces!(B, dipoles::Array{Vec3, 4}, buf::Array{Vec3,4}, sys::System{N}) where N
     (; crystal, extfield, ewald) = sys
 
     fill!(B, zero(Vec3))
@@ -296,7 +296,8 @@ function set_forces!(B, dipoles::Array{Vec3, 4}, sys::System{N}) where N
     for i in 1:natoms(crystal)
         if is_homogeneous(sys)
             ints = interactions_homog(sys)
-            set_forces_aux!(B, dipoles, ints[i], i, all_cells(sys), sys)
+            #set_forces_aux!(B, dipoles, ints[i], i, all_cells(sys), sys)
+            set_forces_aux_homog!(B, dipoles, buf, ints[i], i, sys)
         else
             ints = interactions_inhomog(sys)
             for cell in all_cells(sys)
@@ -372,6 +373,107 @@ function set_forces_aux!(B, dipoles::Array{Vec3, 4}, ints::Interactions, i::Int,
     end
 end
 
+function set_forces_aux_homog!(B, dipoles::Array{Vec3, 4}, buf::Array{Vec3,4}, ints::Interactions, i::Int, sys::System{N}) where N
+    (; latsize) = sys
+
+    cells = all_cells(sys);
+
+    subLatBuffer = view(buf,:,:,:,1);
+
+    # Single-ion anisotropy only contributes in dipole mode. In SU(N) mode, the
+    # anisotropy matrix will be incorporated directly into ℌ.
+    if N == 0
+
+        for cell in cells
+            s = dipoles[cell, i]
+            B[cell, i] -= energy_and_gradient_for_classical_anisotropy(s, ints.aniso.stvexp)[2]
+        end
+        #f = s -> energy_and_gradient_for_classical_anisotropy(s,ints.aniso.stvexp)[2]
+        #@. xx = f(dipoles)
+        #@. B -= xx
+    end
+
+
+    # Heisenberg exchange
+    for (; isculled, bond, J) in ints.heisen
+        isculled && break
+        # Forwards interaction: j there contributes to i here
+        fastcircshift3!(subLatBuffer,view(dipoles,:,:,:,bond.j),-bond.n)
+        subLatBuffer .*= J
+        @views B[:,:,:,bond.i] .-= subLatBuffer
+
+        # Backwards interaction: i here contributes to j there
+        fastcircshift3!(subLatBuffer,view(dipoles,:,:,:,bond.i),+bond.n)
+        subLatBuffer .*= J'
+        @views B[:,:,:,bond.j] .-= subLatBuffer
+    end
+    # Quadratic exchange matrix
+    for (; isculled, bond, J) in ints.exchange
+        isculled && break
+        for cellᵢ in cells
+            cellⱼ = offsetc(cellᵢ, bond.n, latsize)
+            sᵢ = dipoles[cellᵢ, bond.i]
+            sⱼ = dipoles[cellⱼ, bond.j]
+            B[cellᵢ, bond.i] -= J  * sⱼ
+            B[cellⱼ, bond.j] -= J' * sᵢ
+        end
+    end
+    # Scalar biquadratic exchange
+    for (; isculled, bond, J) in ints.biquad
+        isculled && break
+        for cellᵢ in cells
+            cellⱼ = offsetc(cellᵢ, bond.n, latsize)
+            sᵢ = dipoles[cellᵢ, bond.i]
+            sⱼ = dipoles[cellⱼ, bond.j]
+
+            if sys.mode == :dipole
+                Sᵢ = (sys.Ns[cellᵢ, bond.i]-1)/2
+                Sⱼ = (sys.Ns[cellⱼ, bond.j]-1)/2
+                S = √(Sᵢ*Sⱼ)
+                # Renormalization introduces a factor r and a Heisenberg term
+                r = (1 - 1/S + 1/4S^2)
+                B[cellᵢ, bond.i] -= J * (2r*sⱼ*(sᵢ⋅sⱼ) - sⱼ/2)
+                B[cellⱼ, bond.j] -= J * (2r*sᵢ*(sᵢ⋅sⱼ) - sᵢ/2)
+            elseif sys.mode == :large_S
+                B[cellᵢ, bond.i] -= J * 2sⱼ*(sᵢ⋅sⱼ)
+                B[cellⱼ, bond.j] -= J * 2sᵢ*(sᵢ⋅sⱼ)
+            elseif sys.mode == :SUN
+                error("Biquadratic currently unsupported in SU(N) mode.")
+            end
+        end
+    end
+end
+
+function fastcircshift3!(dest,src,shift)
+  s = size(src)
+  ix = mod1(-shift[1], s[1])
+  iy = mod1(-shift[2], s[2])
+  iz = mod1(-shift[3], s[3])
+
+  idx = s[1] - ix
+  idy = s[2] - iy
+  idz = s[3] - iz
+
+  # 8 blocks to copy
+  # dx,dy,dz
+  #dest[1:idx,1:idy,1:idz] .= view(src,(ix+1):s[1],(iy+1):s[2],(iz+1):s[3])
+  copyto!(dest,CartesianIndices((1:idx,1:idy,1:idz)),src,CartesianIndices(((ix+1):s[1],(iy+1):s[2],(iz+1):s[3])))
+  # dx,dy,z
+  copyto!(dest,CartesianIndices((1:idx,1:idy,(idz+1):s[3])),src,CartesianIndices(((ix+1):s[1],(iy+1):s[2],1:iz)))
+  # dx,y,dz
+  copyto!(dest,CartesianIndices((1:idx,(idy+1):s[2],1:idz)),src,CartesianIndices(((ix+1):s[1],1:iy,(iz+1):s[3])))
+  # dx,y,z
+  copyto!(dest,CartesianIndices((1:idx,(idy+1):s[2],(idz+1):s[3])),src,CartesianIndices(((ix+1):s[1],1:iy,1:iz)))
+  # x,dy,dz
+  copyto!(dest,CartesianIndices(((idx+1):s[1],1:idy,1:idz)),src,CartesianIndices((1:ix,(iy+1):s[2],(iz+1):s[3])))
+  # x,dy,z
+  copyto!(dest,CartesianIndices(((idx+1):s[1],1:idy,(idz+1):s[3])),src,CartesianIndices((1:ix,(iy+1):s[2],1:iz)))
+  # x,y,dz
+  copyto!(dest,CartesianIndices(((idx+1):s[1],(idy+1):s[2],1:idz)),src,CartesianIndices((1:ix,1:iy,(iz+1):s[3])))
+  # x,y,z
+  copyto!(dest,CartesianIndices(((idx+1):s[1],(idy+1):s[2],(idz+1):s[3])),src,CartesianIndices((1:ix,1:iy,1:iz)))
+  return nothing
+end
 
 """
     forces(Array{Vec3}, sys::System)

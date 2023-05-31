@@ -68,7 +68,6 @@ mutable struct System{N}
     const extfield         :: Array{Vec3, 4}            # External B field
     const dipoles          :: Array{Vec3, 4}            # Expected dipoles
     const coherents        :: Array{CVec{N}, 4}         # Coherent states
-    const scalar_buffers   :: Vector{Array{Float64, 4}} # Buffers for dynamics routines
     const dipole_buffers   :: Vector{Array{Vec3, 4}}    # Buffers for dynamics routines
     const coherent_buffers :: Vector{Array{CVec{N}, 4}} # Buffers for dynamics routines
 

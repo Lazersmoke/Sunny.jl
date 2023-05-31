@@ -65,13 +65,12 @@ function System(crystal::Crystal, latsize::NTuple{3,Int}, infos::Vector{SpinInfo
     extfield = zeros(Vec3, latsize..., na)
     dipoles = fill(zero(Vec3), latsize..., na)
     coherents = fill(zero(CVec{N}), latsize..., na)
-    scalar_buffers = Array{Float64, 4}[]
     dipole_buffers = Array{Vec3, 4}[]
     coherent_buffers = Array{CVec{N}, 4}[]
     rng = isnothing(seed) ? Random.Xoshiro() : Random.Xoshiro(seed)
 
     ret = System(nothing, mode, crystal, latsize, Ns, κs, gs, interactions, ewald,
-                 extfield, dipoles, coherents, scalar_buffers, dipole_buffers, coherent_buffers, units, rng)
+                 extfield, dipoles, coherents, dipole_buffers, coherent_buffers, units, rng)
     polarize_spins!(ret, (0,0,1))
     return ret
 end
@@ -114,13 +113,12 @@ function clone_system(sys::System{N}) where N
     interactions_clone = map(clone_interactions, interactions_union)
     
     # Empty buffers are required for thread safety.
-    empty_scalar_buffers = Array{Float64, 4}[]
     empty_dipole_buffers = Array{Vec3, 4}[]
     empty_coherent_buffers = Array{CVec{N}, 4}[]
 
     System(origin_clone, mode, crystal, latsize, Ns, copy(κs), copy(gs),
            interactions_clone, ewald_clone, copy(extfield), copy(dipoles), copy(coherents),
-           empty_scalar_buffers,empty_dipole_buffers, empty_coherent_buffers, units, copy(rng))
+           empty_dipole_buffers, empty_coherent_buffers, units, copy(rng))
 end
 
 
@@ -419,15 +417,6 @@ function polarize_spins!(sys::System{N}, dir) where N
     end
 end
 
-function get_scalar_buffers(sys::System{N}, numrequested) where N
-    numexisting = length(sys.scalar_buffers)
-    if numexisting < numrequested
-        for _ in 1:(numrequested-numexisting)
-            push!(sys.scalar_buffers, zeros(Float64,size(sys.dipoles)))
-        end
-    end
-    return sys.scalar_buffers[1:numrequested]
-end
 
 function get_dipole_buffers(sys::System{N}, numrequested) where N
     numexisting = length(sys.dipole_buffers)

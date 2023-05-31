@@ -63,7 +63,7 @@ such as [`LocalSampler`](@ref).
 function step! end
 
 function step!(sys::System{0}, integrator::Langevin)
-    (B, s₁, f₁, r₁, ξ) = get_dipole_buffers(sys, 5)
+    (B, s₁, f₁, r₁, ξ, circBuf) = get_dipole_buffers(sys, 6)
     (; kT, λ, Δt) = integrator
     s = sys.dipoles
 
@@ -71,13 +71,13 @@ function step!(sys::System{0}, integrator::Langevin)
     ξ .*= √(2λ*kT)
 
     # Euler step
-    set_forces!(B, s, sys)
+    set_forces!(B, s, circBuf, sys)
     @. f₁ = rhs_dipole(s, B, λ)
     @. r₁ = rhs_dipole(s, ξ)   # note absence of λ argument -- noise only appears once in rhs.
     @. s₁ = s + Δt * f₁ + √Δt * r₁
 
     # Corrector step
-    set_forces!(B, s₁, sys)
+    set_forces!(B, s₁, circBuf, sys)
     @. s = s + 0.5 * Δt * (f₁ + rhs_dipole(s₁, B, λ)) + 0.5 * √Δt * (r₁ + rhs_dipole(s₁, ξ))
     @. s = normalize_dipole(s, sys.κs)
     nothing
@@ -103,7 +103,7 @@ function step!(sys::System{0}, integrator::ImplicitMidpoint)
         # Integration step for current best guess of midpoint s̄. Produces
         # improved midpoint estimator s̄′.
         @. ŝ = normalize_dipole(s̄, sys.κs)
-        set_forces!(B, ŝ, sys)
+        set_forces!(B, ŝ, circBuf, sys)
         @. s̄′ = s + 0.5 * Δt * rhs_dipole(ŝ, B)
 
         # If converged, then we can return
@@ -165,11 +165,11 @@ end
 
 
 function rhs_langevin!(ΔZ::Array{CVec{N}, 4}, Z::Array{CVec{N}, 4}, ξ::Array{CVec{N}, 4},
-                        B::Array{Vec3, 4}, integrator::Langevin, sys::System{N}) where N
+                        B::Array{Vec3, 4}, circBuf, integrator::Langevin, sys::System{N}) where N
     (; kT, λ, Δt) = integrator
 
     @. sys.dipoles = expected_spin(Z) # temporarily desyncs dipoles and coherents
-    set_forces!(B, sys.dipoles, sys)
+    set_forces!(B, sys.dipoles, circBuf, sys)
 
     if is_homogeneous(sys)
         ints = interactions_homog(sys)
@@ -194,17 +194,17 @@ end
 
 function step!(sys::System{N}, integrator::Langevin) where N
     (Z′, ΔZ₁, ΔZ₂, ξ) = get_coherent_buffers(sys, 4)
-    B = get_dipole_buffers(sys, 1) |> only
+    (B, circBuf) = get_dipole_buffers(sys, 2)
     Z = sys.coherents
 
     randn!(sys.rng, ξ)
 
     # Prediction
-    rhs_langevin!(ΔZ₁, Z, ξ, B, integrator, sys)
+    rhs_langevin!(ΔZ₁, Z, ξ, B, circBuf, integrator, sys)
     @. Z′ = normalize_ket(Z + ΔZ₁, sys.κs)
 
     # Correction
-    rhs_langevin!(ΔZ₂, Z′, ξ, B, integrator, sys)
+    rhs_langevin!(ΔZ₂, Z′, ξ, B, circBuf, integrator, sys)
     @. Z = normalize_ket(Z + (ΔZ₁+ΔZ₂)/2, sys.κs)
 
     # Coordinate dipole data
@@ -212,11 +212,11 @@ function step!(sys::System{N}, integrator::Langevin) where N
 end
 
 
-function rhs_ll!(ΔZ, Z, B, integrator, sys)
+function rhs_ll!(ΔZ, Z, B, circBuf, integrator, sys)
     (; Δt) = integrator
 
     @. sys.dipoles = expected_spin(Z) # temporarily desyncs dipoles and coherents
-    set_forces!(B, sys.dipoles, sys)
+    set_forces!(B, sys.dipoles, circBuf, sys)
 
     if is_homogeneous(sys)
         ints = interactions_homog(sys)
@@ -244,7 +244,7 @@ end
 function step!(sys::System{N}, integrator::ImplicitMidpoint; max_iters=100) where N
     (; atol) = integrator
     (ΔZ, Z̄, Z′, Z″) = get_coherent_buffers(sys, 4)
-    B = get_dipole_buffers(sys, 1) |> only
+    (B, circBuf) = get_dipole_buffers(sys,2)
     Z = sys.coherents
 
     @. Z′ = Z 
@@ -253,7 +253,7 @@ function step!(sys::System{N}, integrator::ImplicitMidpoint; max_iters=100) wher
     for _ in 1:max_iters
         @. Z̄ = (Z + Z′)/2
 
-        rhs_ll!(ΔZ, Z̄, B, integrator, sys)
+        rhs_ll!(ΔZ, Z̄, B, circBuf, integrator, sys)
 
         @. Z″ = Z + ΔZ
 

@@ -26,6 +26,9 @@ import Colors: distinguishable_colors, RGB, Colors
 import Inflate: inflate_gzip
 import Random: randstring, RandomDevice
 
+# Specific to KPM
+import SparseArrays: spzeros, sparse, spdiagm
+
 const Vec3 = SVector{3, Float64}
 const Mat3 = SMatrix{3, 3, Float64, 9}
 const CVec{N} = SVector{N, ComplexF64}
@@ -87,7 +90,9 @@ export FormFactor
 include("SpinWaveTheory/SpinWaveTheory.jl")
 include("SpinWaveTheory/SWTCalculations.jl")
 include("SpinWaveTheory/Lanczos.jl")
-export SpinWaveTheory, dispersion, dssf, delta_function_kernel
+include("SpinWaveTheory/Chebyshev.jl")
+include("SpinWaveTheory/KPM.jl")
+export SpinWaveTheory, dispersion, intensities, dssf, kpm_dssf, kpm_intensities
 
 include("SampledCorrelations/SampledCorrelations.jl")
 include("SampledCorrelations/CorrelationUtils.jl")

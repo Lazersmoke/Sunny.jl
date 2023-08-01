@@ -1,44 +1,163 @@
-struct KPMIntensityFormula{T}
-    P :: Int64
-    kT :: Float64
-    σ :: Float64
-    broadening
-    kernel
-    string_formula :: String
-    calc_intensity :: Function
+"""
+This code will implement the Kernal Polynomial method to approximate the dynamical spin structure factor (DSSF).
+The method takes advantage of the fact that the DSSF can be written as a matrix function and hence we can avoid
+diagonalizing the Hamiltonian. Futher, implementing the KPM we do not even need to explicity construct the matrix
+function, instead we only need to evaluate the application of the function to some vector. For sparce matrices this
+is efficient making this approximate approach useful in systems with large unit cells. 
+""" 
+
+"""
+    bose_function(kT, x)
+
+Returns the Bose occupation factor for energy, x, at temperature kT.
+"""
+
+function bose_function(kT, x) 
+    return 1 / (exp(x/kT) - 1)
 end
 
-function Base.show(io::IO, formula::KPMIntensityFormula{T}) where T
-    print(io,"KPMIntensityFormula{$T}")
-end
 
-function Base.show(io::IO, ::MIME"text/plain", formula::KPMIntensityFormula{T}) where T
-    printstyled(io, "Quantum Scattering Intensity Formula (KPM Method)\n";bold=true, color=:underline)
+"""
+    get_all_coefficients(M, ωs, broadening, σ, kT,γ)  
 
-    formula_lines = split(formula.string_formula,'\n')
+Retrieves the Chebyshev coefficients up to index, M for a user-defined lineshape. A numerical regularization is applied to
+treat the divergence of the dynamical correlation function at small energy. Here, σ² represents an energy cutoff scale 
+which should be related to the energy resolution. γ is the maximum eigenvalue used to rescale the spectrum to lie on the
+interval [-1,1]. 
 
-    intensity_equals = "  Intensity(Q,ω) = <Apply KPM Method> "
-    println(io,"At any (Q,ω), with S = ...:")
-    println(io)
-    println(io,intensity_equals,formula_lines[1])
-    for i = 2:length(formula_lines)
-        precursor = repeat(' ', textwidth(intensity_equals))
-        println(io,precursor,formula_lines[i])
+"""
+function get_all_coefficients(M, ωs, broadening, σ, kT,γ)
+    f(ω, x) = tanh((x/σ)^2) * broadening(ω, x*γ, σ) * (1 + bose_function(kT, x))
+    output = OffsetArray(zeros(M, length(ωs)), 0:M-1, 1:length(ωs))
+    for i in eachindex(ωs)
+        output[:, i] = cheb_coefs(M, 2M, x -> f(ωs[i], x), (-1, 1))
     end
-    println(io,"P = $(formula.P), kT = $(formula.kT), σ = $(formula.σ)")
+    return output
 end
 
+"""
+    apply_kernel(offset_array, kernel, M)
 
-function intensity_formula_kpm(f::Function,swt::SpinWaveTheory,corr_ix::AbstractVector{Int64}; P =, return_type = Float64, string_formula = "f(Q,ω,S{α,β}[ix_q,ix_ω])")
+Applies the Jackson kernel (defined in Chebyshev.jl) to an OffsetArray. The Jackson kernel damps the coefficients of the
+Chebyshev expansion to reduce "Gibbs oscillations" or "ringing" -- numerical artifacts present due to the truncation offset_array
+the Chebyshev series. It should be noted that employing the Jackson kernel comes at a cost to the energy resolution.
+"""
 
-    error("KPM not yet implemented")
+#  
+function apply_kernel(offset_array, kernel, M)
+    kernel === "jackson" ? offset_array .= offset_array .* jackson_kernel(M) : 
+    return offset_array
+end
 
-    stuff = setup_stuff(swt)
-    formula = function(swt::SpinWaveTheory,q::Vec3,ω::Float64)
-        Sαβ = do_KPM(swt,stuff)
-        return f(q,ω,Sαβ[corr_ix])
+"""
+    kpm_dssf(swt::SpinWaveTheory, qs,ωlist,P::Int64,kT,σ,broadening; kernel)
+
+Calculated the Dynamical Spin Structure Factor (DSSF) using the Kernel Polynomial Method (KPM). Requires input in the form of a 
+SpinWaveTheory which contains System information and the rotated spin matrices. The calculation is carried out at each wavevectors
+in qs for all energies appearing in ωlist. The Chebyshev expansion is taken to P terms and the lineshape is specified by the user-
+defined function, broadening. kT is required for the calcualation of the bose function and σ is the width of the lineshape and 
+defines the low energy cutoff σ². There is a keyword argument, kernel, which speficies a damping kernel. 
+"""
+ 
+function kpm_dssf(swt::SpinWaveTheory, qs,ωlist,P::Int64,kT,σ,broadening; kernel)
+    # P is the max Chebyshyev coefficient
+    (; sys, s̃_mat, T̃_mat, Q̃_mat,positions_chem) = swt
+    qs = Sunny.Vec3.(qs)
+    Nm, Ns = length(sys.dipoles), sys.Ns[1] # number of magnetic atoms and dimension of Hilbert space
+    Nf = sys.mode == :SUN ? Ns-1 : 1
+    N=Nf+1
+    nmodes = Nf*Nm
+    M = sys.mode == :SUN ? 1 : (Ns-1) # scaling factor (=1) if in the fundamental representation
+    sqrt_M = √M #define prefactors
+    sqrt_Nm_inv = 1.0 / √Nm #define prefactors    
+    Ĩ = spdiagm([ones(nmodes); -ones(nmodes)]) 
+    n_iters = 50
+    Hmat = zeros(ComplexF64, 2*nmodes, 2*nmodes)
+    Avec_pref = zeros(ComplexF64, Nm) # initialize array of some prefactors   
+    chebyshev_moments = OffsetArray(zeros(ComplexF64,3,3,length(qs),P),1:3,1:3,1:length(qs),0:P-1)
+    Sαβs = zeros(ComplexF64,3,3,length(qs),length(ωlist))
+    for qidx in CartesianIndices(qs)
+        q = qs[qidx]
+        _, qmag = Sunny.chemical_to_magnetic(swt, q)
+        u = zeros(ComplexF64,3,2*nmodes)
+        if sys.mode == :SUN
+            swt_hamiltonian_SUN!(swt, qmag, Hmat)
+        else
+            #swt_hamiltonian_dipole!(swt, qmag, Hmat) # this will break, update with new dipole mode code later
+            throw("Please set mode = :SUN ")
+        end
+        D = 2.0*sparse(Hmat) # calculate D (factor of 2 for correspondence)  
+        lo,hi = Sunny.eigbounds(D,n_iters; extend=0.25) # calculate bounds
+        γ=max(lo,hi) # select upper bound (combine with the preceeding line later)
+        A = Ĩ*D / γ
+        # u(q) calculation)
+        for site = 1:Nm
+            # note that d is the chemical coordinates
+            chemical_coor = positions_chem[site] # find chemical coords
+            phase = exp(2*im * π  * dot(q, chemical_coor)) # calculate phase
+            Avec_pref[site] = sqrt_Nm_inv * phase * sqrt_M # define the prefactor of the tS matrices
+        end
+        # calculate u(q)
+        for site=1:Nm
+            @views tS_μ = s̃_mat[:, :, :, site]*Avec_pref[site] 
+            for μ=1:3
+                for j=2:N
+                    u[μ,(j-1)+(site-1)*(N-1) ]=tS_μ[j,1,μ] 
+                    u[μ,(N-1)*Nm+(j-1)+(site-1)*(N-1) ]=tS_μ[1,j,μ]
+                end
+            end
+        end
+        for β=1:3
+            α0 = zeros(ComplexF64,2*nmodes)
+            α1 = zeros(ComplexF64,2*nmodes)
+            mul!(α0,Ĩ,u[β,:]) # calculate α0
+            mul!(α1,A,α0) # calculate α1   
+            for α=1:3
+                chebyshev_moments[α,β,qidx,0] =  real(dot(u[α,:],α0))
+                chebyshev_moments[α,β,qidx,1] =  real(dot(u[α,:],α1)) 
+            end
+            for m=2:P-1
+                αnew = zeros(ComplexF64,2*nmodes) 
+                mul!(αnew,A,α1)
+                @. αnew = 2*αnew - α0
+                for α=1:3
+                    chebyshev_moments[α,β,qidx,m] = real(dot(u[α,:],αnew))
+                end
+                (α1, α0) = (αnew, α1)
+            end
+        end
+        ωdep =  get_all_coefficients(P,ωlist,broadening,σ,kT,γ)
+        apply_kernel(ωdep,kernel,P)
+        for w=1:length(ωlist)
+            for α=1:3
+                for β=1:3
+                    Sαβs[α,β,qidx,w] = sum(chebyshev_moments[α,β,qidx,:] .*  ωdep[:,w])
+                end
+            end
+        end 
     end
-    KPMIntensityFormula{return_type}(P,kT,σ,broadening,kernel,string_formula,formula)
+    return Sαβs
 end
 
+"""
+    kpm_intensities(swt::SpinWaveTheory, qs,ωlist,P::Int64,kT,σ,broadening; kernel)
 
+Calculated the neutron scattering intensity using the Kernel Polynomial Method (KPM). Calls KPMddsf and so takes the same parameters.
+Requires input in the form of a SpinWaveTheory which contains System information and the rotated spin matrices. The calculation is 
+carried out at each wavevectors in qs for all energies appearing in ωlist. The Chebyshev expansion is taken to P terms and the 
+lineshape is specified by the user-defined function, broadening. kT is required for the calcualation of the bose function and σ is 
+the width of the lineshape and defines the low energy cutoff σ². There is an optional keyword argument, kernel, which speficies a 
+damping kernel. The default is to include no damping.  
+"""
+function kpm_intensities(swt::SpinWaveTheory, qs, ωvals,P::Int64,kT,σ,broadening; kernel = nothing)
+    (; sys) = swt
+    qs = Sunny.Vec3.(qs)
+    Sαβs = kpm_dssf(swt, qs,ωvals,P,kT,σ,broadening;kernel)
+    num_ω = length(ωvals)
+    is = zeros(Float64, size(qs)..., num_ω)
+    for qidx in CartesianIndices(qs)
+        polar_mat = Sunny.polarization_matrix(swt.recipvecs_chem * qs[qidx])
+        is[qidx, :] = real(sum(polar_mat .* Sαβs[:,:,qidx,:],dims=(1,2)))
+    end
+    return is
+end

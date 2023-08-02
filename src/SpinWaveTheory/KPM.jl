@@ -61,7 +61,7 @@ defines the low energy cutoff σ². There is a keyword argument, kernel, which s
  
 function kpm_dssf(swt::SpinWaveTheory, qs,ωlist,P::Int64,kT,σ,broadening; kernel)
     # P is the max Chebyshyev coefficient
-    (; sys, s̃_mat, T̃_mat, Q̃_mat,positions_chem) = swt
+    (; sys, s̃_mat, T̃_mat, Q̃_mat, c′_coef, R_mat, positions_chem) = swt
     qs = Sunny.Vec3.(qs)
     Nm, Ns = length(sys.dipoles), sys.Ns[1] # number of magnetic atoms and dimension of Hilbert space
     Nf = sys.mode == :SUN ? Ns-1 : 1
@@ -69,7 +69,9 @@ function kpm_dssf(swt::SpinWaveTheory, qs,ωlist,P::Int64,kT,σ,broadening; kern
     nmodes = Nf*Nm
     M = sys.mode == :SUN ? 1 : (Ns-1) # scaling factor (=1) if in the fundamental representation
     sqrt_M = √M #define prefactors
-    sqrt_Nm_inv = 1.0 / √Nm #define prefactors    
+    sqrt_Nm_inv = 1.0 / √Nm #define prefactors
+    S = (Ns-1) / 2
+    sqrt_halfS  = √(S/2) #define prefactors   
     Ĩ = spdiagm([ones(nmodes); -ones(nmodes)]) 
     n_iters = 50
     Hmat = zeros(ComplexF64, 2*nmodes, 2*nmodes)
@@ -84,7 +86,8 @@ function kpm_dssf(swt::SpinWaveTheory, qs,ωlist,P::Int64,kT,σ,broadening; kern
             swt_hamiltonian_SUN!(swt, qmag, Hmat)
         else
             #swt_hamiltonian_dipole!(swt, qmag, Hmat) # this will break, update with new dipole mode code later
-            throw("Please set mode = :SUN ")
+            #throw("Please set mode = :SUN ")
+            swt_hamiltonian_dipole!(swt, qmag, Hmat)
         end
         D = 2.0*sparse(Hmat) # calculate D (factor of 2 for correspondence)  
         lo,hi = Sunny.eigbounds(D,n_iters; extend=0.25) # calculate bounds
@@ -98,14 +101,27 @@ function kpm_dssf(swt::SpinWaveTheory, qs,ωlist,P::Int64,kT,σ,broadening; kern
             Avec_pref[site] = sqrt_Nm_inv * phase * sqrt_M # define the prefactor of the tS matrices
         end
         # calculate u(q)
-        for site=1:Nm
-            @views tS_μ = s̃_mat[:, :, :, site]*Avec_pref[site] 
-            for μ=1:3
-                for j=2:N
-                    u[μ,(j-1)+(site-1)*(N-1) ]=tS_μ[j,1,μ] 
-                    u[μ,(N-1)*Nm+(j-1)+(site-1)*(N-1) ]=tS_μ[1,j,μ]
+        if sys.mode == :SUN
+            for site=1:Nm
+                @views tS_μ = s̃_mat[:, :, :, site]*Avec_pref[site] 
+                for μ=1:3
+                    for j=2:N
+                        u[μ,(j-1)+(site-1)*(N-1) ]=tS_μ[j,1,μ] 
+                        u[μ,(N-1)*Nm+(j-1)+(site-1)*(N-1) ]=tS_μ[1,j,μ]
+                    end
                 end
             end
+        elseif sys.mode == :dipole
+            for site = 1:Nm
+                R=R_mat[site]
+                u[1,site]= Avec_pref[site] * sqrt_halfS * (R[1,1] + 1im * R[1,2])  
+                u[1,site+nmodes] = Avec_pref[site] * sqrt_halfS * (R[1,1] - 1im * R[1,2])
+                u[2,site]= Avec_pref[site] * sqrt_halfS * (R[2,1] + 1im * R[2,2]) 
+                u[2,site+nmodes] = Avec_pref[site] * sqrt_halfS * (R[2,1] - 1im * R[2,2]) 
+                u[3,site]= Avec_pref[site] * sqrt_halfS * (R[3,1] + 1im * R[3,2]) 
+                u[3,site+nmodes] = Avec_pref[site] * sqrt_halfS * (R[3,1] - 1im * R[3,2]) 
+            end
+
         end
         for β=1:3
             α0 = zeros(ComplexF64,2*nmodes)
@@ -161,3 +177,58 @@ function kpm_intensities(swt::SpinWaveTheory, qs, ωvals,P::Int64,kT,σ,broadeni
     end
     return is
 end
+
+#=
+struct KPMIntensityFormula{T}
+    P :: Int64
+    kT :: Float64
+    σ :: Float64
+    broadening
+    kernel
+    string_formula :: String
+    calc_intensity :: Function
+end
+
+function Base.show(io::IO, ::MIME"text/plain", formula::KPMIntensityFormula{T}) where T
+    printstyled(io, "Quantum Scattering Intensity Formula (KPM Method)\n";bold=true, color=:underline)
+
+    formula_lines = split(formula.string_formula,'\n')
+
+    intensity_equals = "  Intensity(Q,ω) = <Apply KPM Method> "
+    println(io,"At any (Q,ω), with S = ...:")
+    println(io)
+    println(io,intensity_equals,formula_lines[1])
+    for i = 2:length(formula_lines)
+        precursor = repeat(' ', textwidth(intensity_equals))
+        println(io,precursor,formula_lines[i])
+    end
+    println(io,"P = $(formula.P), kT = $(formula.kT), σ = $(formula.σ)")
+end
+
+
+function intensity_formula_kpm(f::Function,swt::SpinWaveTheory,corr_ix::AbstractVector{Int64}; P =, return_type = Float64, string_formula = "f(Q,ω,S{α,β}[ix_q,ix_ω])")
+      (; sys, s̃_mat, T̃_mat, Q̃_mat,positions_chem) = swt
+    qs = Sunny.Vec3.(qs)
+    Nm, Ns = length(sys.dipoles), sys.Ns[1] # number of magnetic atoms and dimension of Hilbert space
+    Nf = sys.mode == :SUN ? Ns-1 : 1
+    N=Nf+1
+    nmodes = Nf*Nm
+    M = sys.mode == :SUN ? 1 : (Ns-1) # scaling factor (=1) if in the fundamental representation
+    sqrt_M = √M #define prefactors
+    sqrt_Nm_inv = 1.0 / √Nm #define prefactors    
+    Ĩ = spdiagm([ones(nmodes); -ones(nmodes)]) 
+    n_iters = 50
+    
+    # Preallocation
+    Hmat = zeros(ComplexF64, 2*nmodes, 2*nmodes)
+    Avec_pref = zeros(ComplexF64, Nm) # initialize array of some prefactors   
+    chebyshev_moments = OffsetArray(zeros(ComplexF64,3,3,length(qs),P),1:3,1:3,1:length(qs),0:P-1)
+    Sαβs = zeros(ComplexF64,3,3,length(qs),length(ωlist))
+    formula = function(swt::SpinWaveTheory,q::Vec3,ω::Float64)
+        Sαβ = do_KPM(swt,stuff)
+        k = swt.recipvecs_chem * q
+        intensity = f(k,ω,Sαβ[corr_ix])
+    end
+    KPMIntensityFormula{return_type}(P,kT,σ,broadening,kernel,string_formula,formula)
+end
+=#

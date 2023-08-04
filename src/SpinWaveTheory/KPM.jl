@@ -178,7 +178,6 @@ function kpm_intensities(swt::SpinWaveTheory, qs, ωvals,P::Int64,kT,σ,broadeni
     return is
 end
 
-#=
 struct KPMIntensityFormula{T}
     P :: Int64
     kT :: Float64
@@ -207,7 +206,8 @@ end
 
 
 function intensity_formula_kpm(f::Function,swt::SpinWaveTheory,corr_ix::AbstractVector{Int64}; P =, return_type = Float64, string_formula = "f(Q,ω,S{α,β}[ix_q,ix_ω])")
-      (; sys, s̃_mat, T̃_mat, Q̃_mat,positions_chem) = swt
+    # P is the max Chebyshyev coefficient
+    (; sys, s̃_mat, T̃_mat, Q̃_mat, c′_coef, R_mat, positions_chem) = swt
     qs = Sunny.Vec3.(qs)
     Nm, Ns = length(sys.dipoles), sys.Ns[1] # number of magnetic atoms and dimension of Hilbert space
     Nf = sys.mode == :SUN ? Ns-1 : 1
@@ -215,20 +215,93 @@ function intensity_formula_kpm(f::Function,swt::SpinWaveTheory,corr_ix::Abstract
     nmodes = Nf*Nm
     M = sys.mode == :SUN ? 1 : (Ns-1) # scaling factor (=1) if in the fundamental representation
     sqrt_M = √M #define prefactors
-    sqrt_Nm_inv = 1.0 / √Nm #define prefactors    
+    sqrt_Nm_inv = 1.0 / √Nm #define prefactors
+    S = (Ns-1) / 2
+    sqrt_halfS  = √(S/2) #define prefactors   
     Ĩ = spdiagm([ones(nmodes); -ones(nmodes)]) 
     n_iters = 50
-    
-    # Preallocation
     Hmat = zeros(ComplexF64, 2*nmodes, 2*nmodes)
     Avec_pref = zeros(ComplexF64, Nm) # initialize array of some prefactors   
-    chebyshev_moments = OffsetArray(zeros(ComplexF64,3,3,length(qs),P),1:3,1:3,1:length(qs),0:P-1)
-    Sαβs = zeros(ComplexF64,3,3,length(qs),length(ωlist))
-    formula = function(swt::SpinWaveTheory,q::Vec3,ω::Float64)
-        Sαβ = do_KPM(swt,stuff)
-        k = swt.recipvecs_chem * q
-        intensity = f(k,ω,Sαβ[corr_ix])
+    chebyshev_moments = OffsetArray(zeros(ComplexF64,3,3,P),1:3,1:3,0:P-1)
+
+    calc_intensity = function(swt::SpinWaveTheory,q::Vec3)
+        _, qmag = Sunny.chemical_to_magnetic(swt, q)
+        u = zeros(ComplexF64,3,2*nmodes)
+        if sys.mode == :SUN
+            swt_hamiltonian_SUN!(swt, qmag, Hmat)
+        else
+            #swt_hamiltonian_dipole!(swt, qmag, Hmat) # this will break, update with new dipole mode code later
+            #throw("Please set mode = :SUN ")
+            swt_hamiltonian_dipole!(swt, qmag, Hmat)
+        end
+        D = 2.0*sparse(Hmat) # calculate D (factor of 2 for correspondence)  
+        lo,hi = Sunny.eigbounds(D,n_iters; extend=0.25) # calculate bounds
+        γ=max(lo,hi) # select upper bound (combine with the preceeding line later)
+        A = Ĩ*D / γ
+        # u(q) calculation)
+        for site = 1:Nm
+            # note that d is the chemical coordinates
+            chemical_coor = positions_chem[site] # find chemical coords
+            phase = exp(2*im * π  * dot(q, chemical_coor)) # calculate phase
+            Avec_pref[site] = sqrt_Nm_inv * phase * sqrt_M # define the prefactor of the tS matrices
+        end
+        # calculate u(q)
+        if sys.mode == :SUN
+            for site=1:Nm
+                @views tS_μ = s̃_mat[:, :, :, site]*Avec_pref[site] 
+                for μ=1:3
+                    for j=2:N
+                        u[μ,(j-1)+(site-1)*(N-1) ]=tS_μ[j,1,μ]
+                        u[μ,(N-1)*Nm+(j-1)+(site-1)*(N-1) ]=tS_μ[1,j,μ]
+                    end
+                end
+            end
+        elseif sys.mode == :dipole
+            for site = 1:Nm
+                R=R_mat[site]
+                u[1,site]= Avec_pref[site] * sqrt_halfS * (R[1,1] + 1im * R[1,2])
+                u[1,site+nmodes] = Avec_pref[site] * sqrt_halfS * (R[1,1] - 1im * R[1,2])
+                u[2,site]= Avec_pref[site] * sqrt_halfS * (R[2,1] + 1im * R[2,2])
+                u[2,site+nmodes] = Avec_pref[site] * sqrt_halfS * (R[2,1] - 1im * R[2,2])
+                u[3,site]= Avec_pref[site] * sqrt_halfS * (R[3,1] + 1im * R[3,2])
+                u[3,site+nmodes] = Avec_pref[site] * sqrt_halfS * (R[3,1] - 1im * R[3,2])
+            end
+
+        end
+        for β=1:3
+            α0 = zeros(ComplexF64,2*nmodes)
+            α1 = zeros(ComplexF64,2*nmodes)
+            mul!(α0,Ĩ,u[β,:]) # calculate α0
+            mul!(α1,A,α0) # calculate α1
+            for α=1:3
+                chebyshev_moments[α,β,0] =  real(dot(u[α,:],α0))
+                chebyshev_moments[α,β,1] =  real(dot(u[α,:],α1))
+            end
+            for m=2:P-1
+                αnew = zeros(ComplexF64,2*nmodes)
+                mul!(αnew,A,α1)
+                @. αnew = 2*αnew - α0
+                for α=1:3
+                    chebyshev_moments[α,β,m] = real(dot(u[α,:],αnew))
+                end
+                (α1, α0) = (αnew, α1)
+            end
+        end
+
+        return function(ωlist)
+            intensity = zeros(Float64,length(ωlist))
+            ωdep = get_all_coefficients(P,ωlist,broadening,σ,kT,γ)
+            apply_kernel(ωdep,kernel,P)
+            Sαβ = zeros(ComplexF64,3,3)
+            for (iω,ω) = enumerate(ωlist)
+                for α=1:3
+                    for β=1:3
+                        Sαβ[α,β] = sum(chebyshev_moments[α,β,:] .* ωdep[:,w])
+                    end
+                end
+                intensity[iω] = f(k,ω,Sαβ[corr_ix])
+            end
+        end
     end
-    KPMIntensityFormula{return_type}(P,kT,σ,broadening,kernel,string_formula,formula)
+    KPMIntensityFormula{return_type}(P,kT,σ,broadening,kernel,string_formula,calc_intensity)
 end
-=#

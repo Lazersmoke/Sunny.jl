@@ -177,7 +177,6 @@ function kpm_intensities(swt::SpinWaveTheory, qs, ωvals,P::Int64,kT,σ,broadeni
     end
     return is
 end
-
 struct KPMIntensityFormula{T}
     P :: Int64
     kT :: Float64
@@ -204,17 +203,18 @@ function Base.show(io::IO, ::MIME"text/plain", formula::KPMIntensityFormula{T}) 
     println(io,"P = $(formula.P), kT = $(formula.kT), σ = $(formula.σ)")
 end
 
-
-function intensity_formula_kpm(f::Function,swt::SpinWaveTheory,corr_ix::AbstractVector{Int64}; P =, return_type = Float64, string_formula = "f(Q,ω,S{α,β}[ix_q,ix_ω])")
+function intensity_formula_kpm(f,swt::SpinWaveTheory,corr_ix::AbstractVector{Int64}; P =50, kT=Inf,σ=0.1,broadening, kernel=nothing , return_type = Float64, string_formula = "f(Q,ω,S{α,β}[ix_q,ix_ω])")
     # P is the max Chebyshyev coefficient
     (; sys, s̃_mat, T̃_mat, Q̃_mat, c′_coef, R_mat, positions_chem) = swt
-    qs = Sunny.Vec3.(qs)
     Nm, Ns = length(sys.dipoles), sys.Ns[1] # number of magnetic atoms and dimension of Hilbert space
     Nf = sys.mode == :SUN ? Ns-1 : 1
     N=Nf+1
     nmodes = Nf*Nm
     M = sys.mode == :SUN ? 1 : (Ns-1) # scaling factor (=1) if in the fundamental representation
     sqrt_M = √M #define prefactors
+    sqrt_Nm_inv = 1.0 / √Nm #define prefactors
+    S = (Ns-1) / 2
+    sqrt_halfS  = √(S/2) #define prefactors   
     sqrt_Nm_inv = 1.0 / √Nm #define prefactors
     S = (Ns-1) / 2
     sqrt_halfS  = √(S/2) #define prefactors   
@@ -292,16 +292,17 @@ function intensity_formula_kpm(f::Function,swt::SpinWaveTheory,corr_ix::Abstract
             intensity = zeros(Float64,length(ωlist))
             ωdep = get_all_coefficients(P,ωlist,broadening,σ,kT,γ)
             apply_kernel(ωdep,kernel,P)
-            Sαβ = zeros(ComplexF64,3,3)
+            Sαβ = Matrix{ComplexF64}(undef,3,3)
             for (iω,ω) = enumerate(ωlist)
                 for α=1:3
                     for β=1:3
-                        Sαβ[α,β] = sum(chebyshev_moments[α,β,:] .* ωdep[:,w])
+                        Sαβ[α,β] = sum(chebyshev_moments[α,β,:] .* ωdep[:,iω])
                     end
                 end
-                intensity[iω] = f(k,ω,Sαβ[corr_ix])
+                intensity[iω] = Sαβ[corr_ix]
             end
         end
     end
+    KPMIntensityFormula{return_type}(P,kT,σ,broadening,kernel,string_formula,calc_intensity)
     KPMIntensityFormula{return_type}(P,kT,σ,broadening,kernel,string_formula,calc_intensity)
 end

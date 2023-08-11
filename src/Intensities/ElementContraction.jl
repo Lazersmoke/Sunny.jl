@@ -197,7 +197,7 @@ function intensity_formula_kpm(swt::SpinWaveTheory, mode::Symbol; kwargs...)
 end
 
 function intensity_formula_kpm(swt::SpinWaveTheory, contractor::Contraction{T}; kwargs...) where T
-    intensity_formula_kpm(swt,required_correlations(contractor); return_type = T,kwargs...) do k,ω,correlations
+    intensity_formula_kpm(swt,required_correlations(contractor); return_type = T,kwargs...) do k,correlations
         intensity = contract(correlations, k, contractor)
     end
 end

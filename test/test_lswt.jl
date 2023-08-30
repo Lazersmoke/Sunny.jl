@@ -68,7 +68,7 @@
     @test isapprox(is_full_flattened, is_full_golden; atol=1e-9)
 end
 
-
+"""
 @testitem "Lanczos Bounds" begin
     using LinearAlgebra, Random
 
@@ -80,7 +80,7 @@ end
 
     @test (abs(lo/vals[1] - 1) < 0.025) && (abs(hi/vals[end] - 1) < 0.025)
 end
-
+"""
 @testitem "Chebyshev Approximations" begin
     using LinearAlgebra
 

@@ -72,6 +72,7 @@
 end
 
 
+"""
 @testitem "Lanczos Bounds" begin
     using LinearAlgebra, Random
 
@@ -83,7 +84,7 @@ end
 
     @test (abs(lo/vals[1] - 1) < 0.025) && (abs(hi/vals[end] - 1) < 0.025)
 end
-
+"""
 @testitem "Chebyshev Approximations" begin
     using LinearAlgebra
 

@@ -73,56 +73,24 @@ end
 
 
 """
+
 @testitem "Lanczos Bounds" begin
     using LinearAlgebra
-    a = b = 8.539
-    c = 5.2414
-    latvecs = lattice_vectors(a, b, c, 90, 90, 120)
-    crystal = Crystal(latvecs, [[0.24964,0,0.5]], 150)
-    latsize = (1,1,7)
-    rn_seed = 5
-    S = 5/2
-    J₁ = 0.85
-    J₂ = 0.24
-    J₃ = 0.053
-    J₄ = 0.017
-    J₅ = 0.24
-    sys = System(crystal, latsize, [SpinInfo(1; S, g=2)], :dipole; seed=rn_seed)
-    set_exchange!(sys, J₁, Bond(3, 2, [1,1,0]))
-    set_exchange!(sys, J₄, Bond(1, 1, [0,0,1]))
-    set_exchange!(sys, J₂, Bond(1, 3, [0,0,0]))
-    set_exchange!(sys, J₃, Bond(2, 3, [-1,-1,1]))
-    set_exchange!(sys, J₅, Bond(3, 2, [1,1,1]))
-    R1=[0.5 0.5im 0;
-    -0.5im 0.5 0;
-    0 0 0];
-    R2=[0 0 0;
-    0 0 0;
-    0 0 1];
-    function R(site)
-        return exp((site-1)*2π*im/7)*R1+exp(-(site-1)*2π*im/7)*conj(R1)+R2
-    end
-    S1=[1.0, 0, 0]*(5/2)
-    S2=[-0.5, -sqrt(3)/2, 0]*(5/2)
-    S3=[-0.5, sqrt(3)/2, 0]*(5/2)
-
-    for site ∈ 1:7
-        set_dipole!(sys,R(site)*S1,(1,1,site,1))
-        set_dipole!(sys,R(site)*S2,(1,1,site,2))
-        set_dipole!(sys,R(site)*S3,(1,1,site,3))
-    end
-    swt = SpinWaveTheory(sys);
-    q=rand(3)
-    L=length(sys.dipoles)
-    Hmat = zeros(ComplexF64,2L,2L)
-    swt_hamiltonian_dipole!(sys,q,Hmat)
-    Ĩ=diag([ones(L); -ones(L)])
-    A = Ĩ * Hmat
-    lo, hi = Sunny.eigbounds(A, 40)
-    vals = eigvals(A)
+    n=10
+    A = rand(ComplexF64,n,n)
+    A = 0.5(A+A')
+    B = rand(ComplexF64,n,n)
+    B = 0.5(B+transpose(B))
+    D = [A B; conj(B) conj(A)]
+    D = (-minimum(eigvals(D))-0.5)*I(2n)
+    Ĩ = diagm([ones(sz); -ones(sz)])
+    niters=40
+    H = Ĩ*D
+    lo, hi = Sunny.eigbounds(H, niters; extend=0.)
+    vals = eigvals(H)
     @test (abs(lo/vals[1] - 1) < 0.025) && (abs(hi/vals[end] - 1) < 0.025)
 end
-"""
+
 @testitem "Chebyshev Approximations" begin
     using LinearAlgebra
 

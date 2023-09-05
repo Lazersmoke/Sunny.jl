@@ -90,7 +90,7 @@ function kpm_dssf(swt::SpinWaveTheory, qs,ωlist,P::Int64,kT,σ,broadening; kern
             swt_hamiltonian_dipole!(swt, qmag, Hmat)
         end
         D = 2.0*sparse(Hmat) # calculate D (factor of 2 for correspondence)  
-        lo,hi = Sunny.eigbounds(D,n_iters; extend=0.25) # calculate bounds
+        lo,hi = Sunny.eigbounds(Ĩ*D,n_iters; extend=0.25) # calculate bounds
         γ=max(lo,hi) # select upper bound (combine with the preceeding line later)
         A = Ĩ*D / γ
         # u(q) calculation)
@@ -235,7 +235,7 @@ function intensity_formula_kpm(f,swt::SpinWaveTheory,corr_ix::AbstractVector{Int
             swt_hamiltonian_dipole!(swt, qmag, Hmat)
         end
         D = 2.0*sparse(Hmat) # calculate D (factor of 2 for correspondence)  
-        lo,hi = Sunny.eigbounds(D,n_iters; extend=0.25) # calculate bounds
+        lo,hi = Sunny.eigbounds(Ĩ*D,n_iters; extend=0.25) # calculate bounds
         γ=max(lo,hi) # select upper bound (combine with the preceeding line later)
         A = Ĩ*D / γ
         # u(q) calculation)

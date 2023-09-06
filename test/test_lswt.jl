@@ -83,7 +83,7 @@ end
     B = 0.5(B+transpose(B))
     D = [A B; conj(B) conj(A)]
     D = (-minimum(eigvals(D))-0.5)*I(2n)
-    Ĩ = diagm([ones(sz); -ones(sz)])
+    Ĩ = diagm([ones(n); -ones(n)])
     niters=40
     H = Ĩ*D
     lo, hi = Sunny.eigbounds(H, niters; extend=0.)

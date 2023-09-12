@@ -76,7 +76,8 @@ end
     B = rand(ComplexF64,n,n)
     B = 0.5(B+transpose(B))
     D = [A B; conj(B) conj(A)]
-    D = (-minimum(eigvals(D))-0.5)*I(2n)
+    ϵ = minimum(eigvals(D))
+    D = D-(ϵ-0.1)*I(2n)
     Ĩ = diagm([ones(n); -ones(n)])
     niters=40
     H = Ĩ*D

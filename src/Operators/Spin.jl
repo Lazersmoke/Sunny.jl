@@ -20,7 +20,6 @@ function spin_matrices(; N::Int)
     return [Sx, Sy, Sz]
 end
 
-
 # Returns ⟨Z|Sᵅ|Z⟩
 @generated function expected_spin(Z::CVec{N}) where N
     S = spin_matrices(; N)
@@ -38,6 +37,44 @@ end
         Vec3(nx, ny, nz)
     end
 end
+
+function expected_multipolar_moments(Z::CVec{N}) where N
+    M = Z * Z'
+    Q = zeros(Float64,N,N)
+    for i = 1:N, j = 1:N
+        if i <= j
+            Q[i,j] = real(M[i,j] + M[j,i])
+        else
+            Q[i,j] = imag(M[j,i] - M[i,j])
+        end
+    end
+    Q[1:(N^2 - 1)]
+end
+
+function multipolar_generators_times_Z(dE_dT,Z::CVec{N}) where N
+    out = MVector{N,ComplexF64}(undef)
+    out .= 0
+    li = LinearIndices(zeros(N,N))
+    for i = 1:N, j = 1:N
+        k = li[i,j]
+        if k == N^2
+          break
+        end
+        if i <= j
+            out[i] += Z[j] * dE_dT[k]
+            out[j] += Z[i] * dE_dT[k]
+        else
+            out[i] += im * Z[j] * dE_dT[k]
+            out[j] -= im * Z[i] * dE_dT[k]
+        end
+    end
+    out
+end
+
+function dipolar_part(Q)
+    error("NYI")
+end
+
 
 # Find a ket (up to an irrelevant phase) that corresponds to a pure dipole.
 # TODO, we can do this faster by using the exponential map of spin operators,

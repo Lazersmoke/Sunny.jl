@@ -23,11 +23,8 @@ struct PairCoupling
 
     # In :dipole mode, these will be renormalized couplings following
     # the procedure in https://arxiv.org/abs/2304.03874
-    bilin    :: Union{Float64, Mat3} # Bilinear exchange
-    biquad   :: Float64              # Scalar biquadratic
+    matrix :: Matrix{Float64}
 
-    # General pair interactions, only valid in SU(N) mode
-    # general  :: Vector{Tuple{Hermitian{ComplexF64}, Hermitian{ComplexF64}}}
     # TODO: update clone_interactions(), set_interactions_from_origin!
 end
 

@@ -156,7 +156,7 @@ function local_energy_change(sys::System{N}, site, state::SpinState) where N
     for coupling in pair
         (; bond) = coupling
         cellⱼ = offsetc(to_cell(site), bond.n, latsize)
-        qⱼ = expected_multipolar_moments(coherents[cellⱼ, bond.j])
+        qⱼ = multipoles[cellⱼ, bond.j]
 
         J = coupling.matrix
         ΔE += dot(Δq, J, qⱼ)
@@ -248,15 +248,16 @@ function energy_aux(sys::System{N}, ints::Interactions, i::Int, cells, foreachbo
     return E
 end
 
-# Updates ∇E in-place to hold energy gradient, dE/ds, for each spin. In the case
-# of :SUN mode, s is interpreted as expected spin, and dE/ds only includes
-# contributions from Zeeman coupling, bilinear exchange, and long-range
-# dipole-dipole. Excluded terms include onsite coupling, and general pair
-# coupling (biquadratic and beyond).
-function set_energy_grad_dipoles!(∇E, multipoles::Array{Vec3, 4}, sys::System{N}) where N
+# Updates ∇E in-place to hold the gradient of energy with respect to the expectation value of
+# each multipolar moment, dE/dT, for each site. Includes:
+# - Zeeman coupling to the *di*polar moments
+# - Exchange interactions bilinear in the multipolar moments, e.g. Ti' * J * Tj
+# - Long-range dipole-dipole coupling if enabled (!isnothing(ewald))
+# - In :dipole mode only, Renormalized classical single-ion anisotropy
+function set_energy_grad_multipoles!(∇E, multipoles::Array{Vec3, 4}, sys::System{N}) where N
     (; crystal, latsize, extfield, ewald) = sys
 
-    fill!(∇E, zero(Vec3))
+    fill!(∇E, zero(SVector{N^2 - 1,Float64}))
 
     # Zeeman coupling
     for site in eachsite(sys)
@@ -268,12 +269,12 @@ function set_energy_grad_dipoles!(∇E, multipoles::Array{Vec3, 4}, sys::System{
         if is_homogeneous(sys)
             # Interaction is the same at every cell
             interactions = sys.interactions_union[i]
-            set_energy_grad_dipoles_aux!(∇E, multipoles, interactions, sys, i, eachcell(sys), homog_bond_iterator(latsize))
+            accum_energy_grad_from_sublattice!(∇E, multipoles, interactions, sys, i, eachcell(sys), homog_bond_iterator(latsize))
         else
             for cell in eachcell(sys)
                 # There is a different interaction at every cell
                 interactions = sys.interactions_union[cell,i]
-                set_energy_grad_dipoles_aux!(∇E, multipoles, interactions, sys, i, (cell,), inhomog_bond_iterator(latsize, cell))
+                accum_energy_grad_from_sublattice!(∇E, multipoles, interactions, sys, i, (cell,), inhomog_bond_iterator(latsize, cell))
             end
         end
     end
@@ -283,10 +284,12 @@ function set_energy_grad_dipoles!(∇E, multipoles::Array{Vec3, 4}, sys::System{
     end
 end
 
-# Calculate the energy gradient `∇E' for the sublattice `i' at all elements of
-# `cells`. The function `foreachbond` enables efficient iteration over
-# neighboring cell pairs (without double counting).
-function set_energy_grad_dipoles_aux!(∇E, multipoles::Array{Vec3, 4}, ints::Interactions, sys::System{N}, i::Int, cells, foreachbond) where N
+# Accumlates the contribution of each bond (according to `foreachbond') originating
+# in sublattice `i' of `cells' to the energy gradient. The gradient is w.r.t. the
+# expectation value of each multipolar moment `∇E = dE/dT'.
+#
+# In :dipole mode, this also includes the single-ion anisotropy contribution.
+function accum_energy_grad_from_sublattice!(∇E, multipoles::Array{Vec3, 4}, ints::Interactions, sys::System{N}, i::Int, cells, foreachbond) where N
     # Single-ion anisotropy only contributes in dipole mode. In SU(N) mode, the
     # anisotropy matrix will be incorporated directly into ℌ.
     if N == 0
@@ -307,37 +310,44 @@ function set_energy_grad_dipoles_aux!(∇E, multipoles::Array{Vec3, 4}, ints::In
     end
 end
 
-# Updates `HZ` in-place to hold `dE/dZ̄`, which is the Schrödinger analog to the
-# quantity `dE/ds`. **Overwrites the first two dipole buffers in `sys`.**
-function set_energy_grad_coherents!(HZ, Z, sys::System{N}) where N
+
+# Multiplies `Z' by the local mean field hamiltonian at each site, and stores the result in `HZ'
+# 
+# **Overwrites the first two multipole buffers in `sys`.**
+#
+# This is the local mean field hamiltonian of **PhysRevB.106.054423** (Eqns 5-7)
+function mul_local_mean_field_hamiltonian!(HZ, Z, sys::System{N}) where N
     @assert N > 0
 
-    # For efficiency, pre-calculate some of the terms associated with dE/ds,
-    # where s is the expected spin associated with Z. Note that dE_ds does _not_
-    # include anything about the onsite coupling, the biquadratic interactions,
-    # or the general pair couplings, which must be handled in a more general
-    # way.
-    dE_ds, dipoles = get_dipole_buffers(sys, 2)
+    # For efficiency, pre-calculate the expected multipolar moments ⟨Tₐ⟩ of each site
+    # (this is an ewald-type optimization, where we use the fact that sites
+    # are only coupled to each other by expectation values in this classical context)
+    multipoles, dE_dT = get_multipole_buffers(sys, 2)
     @. multipoles = expected_spin(Z)
-    set_energy_grad_multipoles!(dE_ds, multipoles, sys)
 
+    # Use pre-calculated moments to get dE/d⟨Tₐ⟩ (gradient wrt expected moments)
+    set_energy_grad_multipoles!(dE_dT, multipoles, sys)
+
+    # Compute H * Z = ∑ₐ dE/d⟨Tₐ⟩ (Tᵃ * Z)
+    HZ .= multipolar_generators_times_Z.(dE_dT,Z)
+
+    # In :SUN mode, the single-ion anisotropy Λ is already in terms of Z,
+    # so it is not included in dE/dT and needs to be included directly here
     if is_homogeneous(sys)
         ints = interactions_homog(sys)
         for site in eachsite(sys)
             Λ = ints[to_atom(site)].onsite :: Matrix
-            #HZ[site] = mul_spin_matrices(Λ, dE_ds[site], Z[site])
-            HZ[site] = Λ * Z[site] + multipolar_generators_times_Z(dE_dT[site],Z[site])
+            HZ[site] += Λ * Z[site]
         end
     else
         ints = interactions_inhomog(sys)
         for site in eachsite(sys)
             Λ = ints[site].onsite :: Matrix
-            #HZ[site] = mul_spin_matrices(Λ, dE_ds[site], Z[site])
-            HZ[site] = Λ * Z[site] + multipolar_generators_times_Z(dE_dT[site],Z[site])
+            HZ[site] += Λ * Z[site]
         end 
     end
 
-    @. dE_ds = dipoles = Vec3(0,0,0)
+    @. dE_dT = multipoles = Vec3(0,0,0)
 end
 
 # Internal testing functions

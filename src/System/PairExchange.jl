@@ -113,8 +113,10 @@ function set_exchange!(sys::System{N}, J, bond::Bond; biquad=0, large_S=false) w
 
     J = to_float_or_mat3(J)
 
+    ρ = spin_multipoles_representation(; N)
+
     # Verify that exchange is symmetry-consistent
-    if !is_coupling_valid(sys.crystal, bond, J)
+    if !is_coupling_valid(sys.crystal, bond, ρ, J)
         @error """Symmetry-violating exchange: $J.
                   Use `print_bond(crystal, $bond)` for more information."""
         error("Interaction violates symmetry.")
@@ -126,12 +128,13 @@ function set_exchange!(sys::System{N}, J, bond::Bond; biquad=0, large_S=false) w
     end
 
     for i in 1:natoms(sys.crystal)
-        bonds, Js = all_symmetry_related_couplings_for_atom(sys.crystal, i, bond, J)
+        bonds, Js = all_symmetry_related_couplings_for_atom(sys.crystal, i, bond, ρ, J)
         for (bond′, J′) in zip(bonds, Js)
             push_coupling!(sys, ints[i].pair, bond′, J′, biquad, large_S)
         end
     end
 end
+
 
 # Converts two sites to a bond with indices for possibly reshaped unit cell. For
 # internal use only.

@@ -75,6 +75,35 @@ function dipolar_part(Q)
     error("NYI")
 end
 
+function multipolar_matrices(; N)
+    T = Vector{Matrix{ComplexF64}}(undef,N^2-1)
+    li = LinearIndices(zeros(N,N))
+
+    for i = 1:(N^2 - 1)
+        T[i] = zeros(ComplexF64,N,N)
+        v = zeros(ComplexF64,N^2-1)
+        v[i] = 1
+        for j = 1:N
+            Z = zeros(ComplexF64,N)
+            Z[j] = 1
+            T[i][:,j] = multipolar_generators_times_Z(v,SVector{N,ComplexF64}(Z))
+        end
+    end
+    T
+end
+
+function spin_multipoles_representation(; N)
+    S = spin_matrices(; N)
+    T = multipolar_matrices(; N)
+    M = zeros(ComplexF64,N^2-1,N)
+    for i = 1:(N^2-1), j = 1:3
+        M[i,j] = tr(T[i] * S[j])
+    end
+    function ρ(R)
+        M * R * M'
+    end
+end
+
 
 # Find a ket (up to an irrelevant phase) that corresponds to a pure dipole.
 # TODO, we can do this faster by using the exponential map of spin operators,

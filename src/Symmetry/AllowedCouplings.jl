@@ -88,10 +88,11 @@ const transpose_op_3x3 = [
 # Returns a projection operator P that maps to zero any symmetry-unallowed
 # coupling matrix J. The space spanned by the eigenvectors of P with eigenvalue
 # 1 represents the allowed coupling matrices J.
-function projector_for_symop(cryst::Crystal, s::SymOp, parity::Bool)
+function projector_for_symop(cryst::Crystal, s::SymOp, parity::Bool, ρ)
     # Cartesian-space rotation operator corresponding to `s`
     R = cryst.latvecs * s.R * inv(cryst.latvecs)
-    R = Matrix(R) # SMatrix -> Matrix
+    # Matrix representation of the rotation
+    R = ρ(R)
 
     # Constraint is modeled as `F J = 0`
     F = kron(R, R) - (parity ? I : transpose_op_3x3)
@@ -108,27 +109,27 @@ end
 # Return an operator P that implicitly gives the space of symmetry allowed
 # coupling matrices for bond b. Specifically, x is an allowed coupling if and
 # only if it is an eigenvector of P with eigenvalue 1, i.e., `P x = x`.
-function symmetry_allowed_couplings_operator(cryst::Crystal, b::BondPos)
+function symmetry_allowed_couplings_operator(cryst::Crystal, b::BondPos, ρ)
     P = I
     for (s, parity) in symmetries_between_bonds(cryst, b, b)
-        P = P * projector_for_symop(cryst, s, parity)
+        P = P * projector_for_symop(cryst, s, parity, ρ)
     end
     # Allowed coupling matrices J are simultaneously eigenvectors for all
     # projectors above, with eigenvalue 1.
     return P
 end
 
-function transform_coupling_by_symmetry(cryst, J, symop, parity)
+function transform_coupling_by_symmetry(cryst, ρ, J, symop, parity)
     R = cryst.latvecs * symop.R * inv(cryst.latvecs)
-    return R * (parity ? J : J') * R'
+    return ρ(R) * (parity ? J : J') * ρ(R')
 end
 
 # Check whether a coupling matrix J is consistent with symmetries of a bond
-function is_coupling_valid(cryst::Crystal, b::BondPos, J)
+function is_coupling_valid(cryst::Crystal, b::BondPos, ρ, J)
     J isa Number && return true
     
     for sym in symmetries_between_bonds(cryst, b, b)
-        J′ = transform_coupling_by_symmetry(cryst, J, sym...)
+        J′ = transform_coupling_by_symmetry(cryst, ρ, J, sym...)
         # TODO use symprec to handle case where symmetry is inexact
         if !isapprox(J, J′; atol = 1e-12)
             return false
@@ -137,8 +138,8 @@ function is_coupling_valid(cryst::Crystal, b::BondPos, J)
     return true
 end
 
-function is_coupling_valid(cryst::Crystal, b::Bond, J)
-    return is_coupling_valid(cryst, BondPos(cryst, b), J)
+function is_coupling_valid(cryst::Crystal, b::Bond, ρ, J)
+    return is_coupling_valid(cryst, BondPos(cryst, b), ρ, J)
 end
 
 
@@ -262,12 +263,12 @@ function basis_for_symmetry_allowed_couplings(cryst::Crystal, b::Bond)
     return basis_for_symmetry_allowed_couplings(cryst, BondPos(cryst, b))
 end
 
-function transform_coupling_for_bonds(cryst, b, b_ref, J_ref)
+function transform_coupling_for_bonds(cryst, b, b_ref, ρ, J_ref)
     J_ref isa Number && return J_ref
 
     syms = symmetries_between_bonds(cryst, BondPos(cryst, b), BondPos(cryst, b_ref))
     isempty(syms) && error("Bonds $b and $b_ref are not symmetry equivalent.")
-    return transform_coupling_by_symmetry(cryst, J_ref, first(syms)...)
+    return transform_coupling_by_symmetry(cryst, ρ, J_ref, first(syms)...)
 end
 
 """
@@ -277,15 +278,15 @@ Given a reference bond `b` and coupling matrix `J` on that bond, return a list
 of symmetry-equivalent bonds (constrained to start from atom `i`), and a
 corresponding list of symmetry-transformed coupling matrices.
 """
-function all_symmetry_related_couplings_for_atom(cryst::Crystal, i::Int, b_ref::Bond, J_ref::T) where T
-    @assert is_coupling_valid(cryst, b_ref, J_ref)
+function all_symmetry_related_couplings_for_atom(cryst::Crystal, i::Int, b_ref::Bond, ρ, J_ref::T) where T
+    @assert is_coupling_valid(cryst, b_ref, ρ, J_ref)
 
     bs = Bond[]
     Js = T[]
 
     for b in all_symmetry_related_bonds_for_atom(cryst, i, b_ref)
         push!(bs, b)
-        push!(Js, transform_coupling_for_bonds(cryst, b, b_ref, J_ref))
+        push!(Js, transform_coupling_for_bonds(cryst, b, b_ref, ρ, J_ref))
     end
 
     return (bs, Js)
@@ -298,14 +299,14 @@ Given a reference bond `b` and coupling matrix `J` on that bond, return a list
 of symmetry-equivalent bonds and a corresponding list of symmetry-transformed
 coupling matrices.
 """
-function all_symmetry_related_couplings(cryst::Crystal, b_ref::Bond, J_ref)
+function all_symmetry_related_couplings(cryst::Crystal, b_ref::Bond, ρ, J_ref)
     J_ref = Mat3(J_ref)
 
     bs = Bond[]
     Js = Mat3[]
 
     for i in eachindex(cryst.positions)
-        (bs_i, Js_i) = all_symmetry_related_couplings_for_atom(cryst, i, b_ref, J_ref)
+        (bs_i, Js_i) = all_symmetry_related_couplings_for_atom(cryst, i, b_ref, ρ, J_ref)
         append!(bs, bs_i)
         append!(Js, Js_i)
     end

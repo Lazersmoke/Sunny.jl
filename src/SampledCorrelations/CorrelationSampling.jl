@@ -1,7 +1,7 @@
 function observable_values!(buf, sys::System{N}, ops; apply_g = true) where N
     if N == 0
         for site in eachsite(sys), (i, op) in enumerate(ops)
-            dipole = sys.dipoles[site]
+            dipole = dipolar_part(sys.multipoles[site])
             if apply_g
               dipole = sys.gs[site] * dipole
             end
@@ -52,7 +52,7 @@ function new_sample!(sc::SampledCorrelations, sys::System; processtraj! = no_pro
     (; Δt, samplebuf, measperiod, apply_g) = sc
     nsnaps = size(samplebuf, 6)
 
-    @assert size(sys.dipoles) == size(samplebuf)[2:5] "`System` size not compatible with given `SampledCorrelations`"
+    @assert size(sys.multipoles) == size(samplebuf)[2:5] "`System` size not compatible with given `SampledCorrelations`"
 
     trajectory!(samplebuf, sys, Δt, nsnaps, sc.observables; measperiod = measperiod, apply_g = apply_g)
 

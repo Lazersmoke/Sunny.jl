@@ -66,14 +66,15 @@ function System(crystal::Crystal, latsize::NTuple{3,Int}, infos::Vector{SpinInfo
     ewald = nothing
 
     extfield = zeros(Vec3, latsize..., na)
-    dipoles = fill(zero(Vec3), latsize..., na)
+    multipoles = fill(zero(SVector{N^2-1,Float64}), latsize..., na)
     coherents = fill(zero(CVec{N}), latsize..., na)
     dipole_buffers = Array{Vec3, 4}[]
+    multipole_buffers = Array{SVector{N^2 - 1,Float64}, 4}[]
     coherent_buffers = Array{CVec{N}, 4}[]
     rng = isnothing(seed) ? Random.Xoshiro() : Random.Xoshiro(seed)
 
     ret = System(nothing, mode, crystal, latsize, Ns, κs, gs, interactions, ewald,
-                 extfield, dipoles, coherents, dipole_buffers, coherent_buffers, units, rng)
+                 extfield, multipoles, coherents, dipole_buffers, multipole_buffers, coherent_buffers, units, rng)
     polarize_spins!(ret, (0,0,1))
     return ret
 end
@@ -120,7 +121,7 @@ Base.deepcopy(_::System) = error("Use `clone_system` instead of `deepcopy`.")
 # It is intended to be thread-safe to use the original and the copied systems,
 # without any restrictions, but see caveats in `clone_ewald()`.
 function clone_system(sys::System{N}) where N
-    (; origin, mode, crystal, latsize, Ns, gs, κs, extfield, interactions_union, ewald, dipoles, coherents, units, rng) = sys
+    (; origin, mode, crystal, latsize, Ns, gs, κs, extfield, interactions_union, ewald, multipoles, coherents, units, rng) = sys
 
     origin_clone = isnothing(origin) ? nothing : clone_system(origin)
     ewald_clone  = isnothing(ewald)  ? nothing : clone_ewald(ewald)
@@ -131,11 +132,12 @@ function clone_system(sys::System{N}) where N
     
     # Empty buffers are required for thread safety.
     empty_dipole_buffers = Array{Vec3, 4}[]
+    empty_multipole_buffers = Array{SVector{N^2-1,Float64}, 4}[]
     empty_coherent_buffers = Array{CVec{N}, 4}[]
 
     System(origin_clone, mode, crystal, latsize, Ns, copy(κs), copy(gs),
-           interactions_clone, ewald_clone, copy(extfield), copy(dipoles), copy(coherents),
-           empty_dipole_buffers, empty_coherent_buffers, units, copy(rng))
+           interactions_clone, ewald_clone, copy(extfield), copy(multipoles), copy(coherents),
+           empty_dipole_buffers, empty_multipole_buffers, empty_coherent_buffers, units, copy(rng))
 end
 
 
@@ -146,7 +148,7 @@ Four indices identifying a single site in a [`System`](@ref). The first three
 indices select the lattice cell and the last selects the sublattice (i.e., the
 atom within the unit cell).
 
-This object can be used to index `dipoles` and `coherents` fields of a `System`.
+This object can be used to index `multipoles` and `coherents` fields of a `System`.
 A `Site` is also required to specify inhomogeneous interactions via functions
 such as [`set_external_field_at!`](@ref) or [`set_exchange_at!`](@ref).
 
@@ -176,7 +178,7 @@ const Site = Union{NTuple{4, Int}, CartesianIndex{4}}
 
 An iterator over all [`Site`](@ref)s in the system. 
 """
-@inline eachsite(sys::System) = CartesianIndices(sys.dipoles)
+@inline eachsite(sys::System) = CartesianIndices(sys.multipoles)
 
 """
     global_position(sys::System, site::Site)
@@ -201,7 +203,7 @@ end
 Get the magnetic moment for a [`Site`](@ref). This is the spin dipole multiplied
 by the Bohr magneton and the local g-tensor.
 """
-magnetic_moment(sys::System, site) = sys.units.μB * sys.gs[site] * sys.dipoles[site]
+magnetic_moment(sys::System, site) = sys.units.μB * sys.gs[site] * dipolar_part(sys.multipoles[site])
 
 # Total volume of system
 volume(sys::System) = cell_volume(sys.crystal) * prod(sys.latsize)
@@ -231,7 +233,7 @@ function can be useful for working with systems that have been reshaped using
 site = position_to_site(sys, [4.5, 0.5, 0.5])
 
 # Print the dipole at this site
-println(sys.dipoles[site])
+println(dipolar_part(sys.multipoles[site]))
 ```
 """
 function position_to_site(sys::System, r)
@@ -364,11 +366,11 @@ end
 end
 
 @inline function getspin(sys::System{N}, site) where N
-    return SpinState(sys.dipoles[site], sys.coherents[site])
+    return SpinState(sys.multipoles[site], sys.coherents[site])
 end
 
 @inline function setspin!(sys::System{N}, spin::SpinState{N}, site) where N
-    sys.dipoles[site] = spin.s
+    sys.multipoles[site] = spin.s
     sys.coherents[site] = spin.Z
     return
 end
@@ -430,10 +432,20 @@ function get_dipole_buffers(sys::System{N}, numrequested) where N
     numexisting = length(sys.dipole_buffers)
     if numexisting < numrequested
         for _ in 1:(numrequested-numexisting)
-            push!(sys.dipole_buffers, zero(sys.dipoles))
+            push!(sys.dipole_buffers, zeros(Vec3,size(sys.multipoles)))
         end
     end
     return view(sys.dipole_buffers, 1:numrequested)
+end
+
+function get_multipole_buffers(sys::System{N}, numrequested) where N
+    numexisting = length(sys.multipole_buffers)
+    if numexisting < numrequested
+        for _ in 1:(numrequested-numexisting)
+            push!(sys.multipole_buffers, zero(sys.multipoles))
+        end
+    end
+    return view(sys.multipole_buffers, 1:numrequested)
 end
 
 function get_coherent_buffers(sys::System{N}, numrequested) where N

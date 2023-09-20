@@ -63,23 +63,28 @@ such as [`LocalSampler`](@ref).
 function step! end
 
 function step!(sys::System{0}, integrator::Langevin)
-    (∇E, s₁, f₁, r₁, ξ) = get_dipole_buffers(sys, 5)
+    (∇E, s₁, f₁, r₁, ξ, s) = get_dipole_buffers(sys, 6)
+    dE_dT = get_multipole_buffers(sys, 1)
     (; kT, λ, Δt) = integrator
-    s = sys.dipoles
+    q = sys.multipoles
 
     randn!(sys.rng, ξ)
     ξ .*= √(2λ*kT)
 
     # Euler step
-    set_energy_grad_dipoles!(∇E, s, sys)
+    set_energy_grad_multipoles!(dE_dT, q, sys)
+    ∇E .= dipolar_part.(dE_dT)
     @. f₁ = rhs_dipole(s, -∇E, λ)
     @. r₁ = rhs_dipole(s, ξ)   # note absence of λ argument -- noise only appears once in rhs.
     @. s₁ = s + Δt * f₁ + √Δt * r₁
+    q .= embed_dipoles_as_multipoles.(s₁)
 
     # Corrector step
-    set_energy_grad_dipoles!(∇E, s₁, sys)
+    set_energy_grad_multipoles!(dE_dT, q, sys)
+    ∇E .= dipolar_part.(dE_dT)
     @. s = s + 0.5 * Δt * (f₁ + rhs_dipole(s₁, -∇E, λ)) + 0.5 * √Δt * (r₁ + rhs_dipole(s₁, ξ))
     @. s = normalize_dipole(s, sys.κs)
+    q .= embed_dipoles_as_multipoles.(s)
     nothing
 end
 
@@ -90,10 +95,11 @@ end
 #   (s′ - s)/Δt = 2(s̄ - s)/Δt = - ŝ × B,
 # where B = -∂E/∂ŝ.
 function step!(sys::System{0}, integrator::ImplicitMidpoint)
-    s = sys.dipoles
+    q = sys.multipoles
     (; Δt, atol) = integrator
 
-    (∇E, s̄, ŝ, s̄′) = get_dipole_buffers(sys, 4)
+    (∇E, s̄, ŝ, s̄′, s) = get_dipole_buffers(sys, 5)
+    dE_dT = get_multipole_buffers(sys, 1)
     
     # Initial guess for midpoint
     @. s̄ = s
@@ -103,7 +109,9 @@ function step!(sys::System{0}, integrator::ImplicitMidpoint)
         # Integration step for current best guess of midpoint s̄. Produces
         # improved midpoint estimator s̄′.
         @. ŝ = normalize_dipole(s̄, sys.κs)
-        set_energy_grad_dipoles!(∇E, ŝ, sys)
+        q .= embed_dipoles_as_multipoles.(ŝ)
+        set_energy_grad_multipoles!(dE_dT, q, sys)
+        ∇E .= dipolar_part.(dE_dT)
         @. s̄′ = s + 0.5 * Δt * rhs_dipole(ŝ, -∇E)
 
         # If converged, then we can return
@@ -111,6 +119,7 @@ function step!(sys::System{0}, integrator::ImplicitMidpoint)
             # Normalization here should not be necessary in principle, but it
             # could be useful in practice for finite `atol`.
             @. s = normalize_dipole(2*s̄′ - s, sys.κs)
+            q .= embed_dipoles_as_multipoles.(s)
             return
         end
 
@@ -148,17 +157,17 @@ function step!(sys::System{N}, integrator::Langevin) where N
     randn!(sys.rng, ξ)
 
     # Prediction
-    set_energy_grad_coherents!(HZ, Z, sys)
+    mul_local_mean_field_hamiltonian!(HZ, Z, sys)
     rhs_langevin!(ΔZ₁, Z, ξ, HZ, integrator, sys)
     @. Z′ = normalize_ket(Z + ΔZ₁, sys.κs)
 
     # Correction
-    set_energy_grad_coherents!(HZ, Z′, sys)
+    mul_local_mean_field_hamiltonian!(HZ, Z′, sys)
     rhs_langevin!(ΔZ₂, Z′, ξ, HZ, integrator, sys)
     @. Z = normalize_ket(Z + (ΔZ₁+ΔZ₂)/2, sys.κs)
 
     # Coordinate dipole data
-    @. sys.dipoles = expected_spin(Z)
+    @. sys.multipoles = expected_multipolar_moments(Z)
 end
 
 function rhs_langevin!(ΔZ::Array{CVec{N}, 4}, Z::Array{CVec{N}, 4}, ξ::Array{CVec{N}, 4},
@@ -189,14 +198,14 @@ function step!(sys::System{N}, integrator::ImplicitMidpoint; max_iters=100) wher
     for _ in 1:max_iters
         @. Z̄ = (Z + Z′)/2
 
-        set_energy_grad_coherents!(HZ, Z̄, sys)
+        mul_local_mean_field_hamiltonian!(HZ, Z̄, sys)
         rhs_ll!(ΔZ, HZ, integrator, sys)
 
         @. Z″ = Z + ΔZ
 
         if fast_isapprox(Z′, Z″, atol=atol*√length(Z′))
             @. Z = normalize_ket(Z″, sys.κs)
-            @. sys.dipoles = expected_spin(Z)
+            @. sys.multipoles = expected_multipolar_moments(Z)
             return
         end
 

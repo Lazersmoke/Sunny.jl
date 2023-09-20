@@ -189,9 +189,9 @@ end
 
 
 # Calculate score for a bond. Lower would be preferred.
-function score_bond(cryst::Crystal, b::Bond)
+function score_bond(cryst::Crystal, b::Bond, ρ)
     # Favor bonds with fewer nonzero elements in basis matrices J
-    Js = basis_for_symmetry_allowed_couplings(cryst, b)
+    Js = basis_for_symmetry_allowed_couplings(cryst, b, ρ)
     nnz = [count(abs.(J) .> 1e-12) for J in Js]
     score = Float64(sum(nnz))
 
@@ -217,7 +217,7 @@ Returns a full list of bonds, one for each symmetry equivalence class, up to
 distance `max_dist`. The reference bond `b` for each equivalence class is
 selected according to a scoring system that prioritizes simplification of the
 elements in `basis_for_symmetry_allowed_couplings(cryst, b)`."""
-function reference_bonds(cryst::Crystal, max_dist::Float64; min_dist=0.0)
+function reference_bonds(cryst::Crystal, max_dist::Float64, ρ; min_dist=0.0)
     # Bonds, one for each equivalence class
     ref_bonds = Bond[]
     for i in unique_indices(cryst.classes)
@@ -236,10 +236,10 @@ function reference_bonds(cryst::Crystal, max_dist::Float64; min_dist=0.0)
         # Find full set of symmetry equivalent bonds
         equiv_bonds = unique([transform(cryst, s, rb) for s in cryst.symops])
         # Take the bond with lowest score
-        return argmin(b -> score_bond(cryst, b), equiv_bonds)
+        return argmin(b -> score_bond(cryst, b, ρ), equiv_bonds)
     end
 end
-reference_bonds(cryst::Crystal, max_dist) = reference_bonds(cryst, convert(Float64, max_dist))
+reference_bonds(cryst::Crystal, max_dist, ρ) = reference_bonds(cryst, convert(Float64, max_dist), ρ)
 
 """
     all_symmetry_related_bonds_for_atom(cryst::Crystal, i::Int, b::Bond)

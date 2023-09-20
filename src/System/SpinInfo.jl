@@ -26,7 +26,8 @@ end
 function propagate_site_info(cryst::Crystal, infos::Vector{SpinInfo})
     # Verify that all g tensors are consistent with the the site symmetries
     for info in infos
-        if !is_coupling_valid(cryst, Bond(info.atom, info.atom, (0,0,0)), info.g)
+        ρ = spin_multipoles_representation(; N = Int64(2info.S + 1))
+        if !is_coupling_valid(cryst, Bond(info.atom, info.atom, (0,0,0)), ρ, info.g)
             error("g-tensor $(info.g) is inconsistent with the site symmetry of atom $(info.atom).")
         end
     end
@@ -37,7 +38,8 @@ function propagate_site_info(cryst::Crystal, infos::Vector{SpinInfo})
     return map(enumerate(atom_to_ref_atom)) do (a, a′)
         info = infos[findfirst(==(a′), ref_atoms)]
         S = info.S
-        g = transform_coupling_for_bonds(cryst, Bond(a,a,(0,0,0)), Bond(a′,a′,(0,0,0)), info.g)
+        ρ = spin_multipoles_representation(; N = Int64(2S + 1))
+        g = transform_coupling_for_bonds(cryst, Bond(a,a,(0,0,0)), Bond(a′,a′,(0,0,0)), ρ, info.g)
         SpinInfo(a; S, g)
     end
 end

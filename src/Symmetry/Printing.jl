@@ -94,7 +94,7 @@ function basis_for_exchange_on_bond(cryst::Crystal, b::Bond; b_ref)
     # If `b_ref` is nothing, select it from reference_bonds()
     b_ref = @something b_ref begin
         d = global_distance(cryst, b)
-        ref_bonds = reference_bonds(cryst, d; min_dist=d)
+        ref_bonds = reference_bonds(cryst, d, ρ; min_dist=d)
         only(filter(b′ -> is_related_by_symmetry(cryst, b, b′), ref_bonds))
     end
 
@@ -128,14 +128,14 @@ Prints symmetry information for bond `bond`. A symmetry-equivalent reference
 bond `b_ref` can optionally be provided to fix the meaning of the coefficients
 `A`, `B`, ...
 """
-function print_bond(cryst::Crystal, b::Bond; b_ref=nothing, io=stdout)
+function print_bond(cryst::Crystal, b::Bond, ρ; b_ref=nothing, io=stdout)
     # How many digits to use in printing coefficients
     digits = 14
     # Tolerance below which coefficients are dropped
     atol = 1e-12
     
     if b.i == b.j && iszero(b.n)
-        print_site(cryst, b.i; io)
+        print_site(cryst, b.i, ρ; io)
     else
 
         ri = cryst.positions[b.i]
@@ -187,10 +187,10 @@ a maximum bond distance of `max_dist`. Equivalent to calling `print_bond(cryst,
 b)` for every bond `b` in `reference_bonds(cryst, max_dist)`, where
 `Bond(i, i, [0,0,0])` refers to a single site `i`.
 """
-function print_symmetry_table(cryst::Crystal, max_dist)
+function print_symmetry_table(cryst::Crystal, max_dist, ρ)
     validate_crystal(cryst)
-    for b in reference_bonds(cryst, max_dist)
-        print_bond(cryst, b; b_ref=b)
+    for b in reference_bonds(cryst, max_dist, ρ)
+        print_bond(cryst, b, ρ; b_ref=b)
     end
 end
 
@@ -218,7 +218,7 @@ Print symmetry information for the site `i`, including allowed g-tensor and
 allowed anisotropy operator. An optional rotation matrix `R` can be provided to
 define the reference frame for expression of the anisotropy.
 """
-function print_site(cryst, i; R=Mat3(I), ks=[2,4,6], io=stdout)
+function print_site(cryst, i, ρ; R=Mat3(I), ks=[2,4,6], io=stdout)
     r = cryst.positions[i]
     class_i = cryst.classes[i]
     m = count(==(class_i), cryst.classes)
@@ -236,7 +236,7 @@ function print_site(cryst, i; R=Mat3(I), ks=[2,4,6], io=stdout)
     digits = 14
 
     R = convert(Mat3, R) # Rotate to frame of R
-    basis = basis_for_symmetry_allowed_couplings(cryst, Bond(i, i, [0,0,0]))
+    basis = basis_for_symmetry_allowed_couplings(cryst, Bond(i, i, [0,0,0]), ρ)
     # TODO: `R` should be passed to `basis_for_symmetry_allowed_couplings` to
     # get a nicer basis.
     basis = [R * b * R' for b in basis]

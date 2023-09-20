@@ -42,10 +42,16 @@ function expected_multipolar_moments(Z::CVec{N}) where N
     M = Z * Z'
     Q = zeros(Float64,N,N)
     for i = 1:N, j = 1:N
-        if i <= j
-            Q[i,j] = real(M[i,j] + M[j,i])
+        if i == j
+            if i == N
+                continue
+            end
+            Q[i,i] = M[i,i]/sqrt(2)
+            Q[i+1,i+1] = -M[i+1,i+1]/sqrt(2)
+        elseif i < j
+            Q[i,j] = real(M[i,j] + M[j,i])/sqrt(2)
         else
-            Q[i,j] = imag(M[j,i] - M[i,j])
+            Q[i,j] = imag(M[j,i] - M[i,j])/sqrt(2)
         end
     end
     Q[1:(N^2 - 1)]
@@ -60,12 +66,15 @@ function multipolar_generators_times_Z(dE_dT,Z::CVec{N}) where N
         if k == N^2
           break
         end
-        if i <= j
-            out[i] += Z[j] * dE_dT[k]
-            out[j] += Z[i] * dE_dT[k]
+        if i == j
+            out[i] += Z[i] * dE_dT[k]/sqrt(2)
+            out[i+1] -= Z[i+1] * dE_dT[k]/sqrt(2)
+        elseif i < j
+            out[i] += Z[j] * dE_dT[k]/sqrt(2)
+            out[j] += Z[i] * dE_dT[k]/sqrt(2)
         else
-            out[i] += im * Z[j] * dE_dT[k]
-            out[j] -= im * Z[i] * dE_dT[k]
+            out[i] += im * Z[j] * dE_dT[k]/sqrt(2)
+            out[j] -= im * Z[i] * dE_dT[k]/sqrt(2)
         end
     end
     out
@@ -92,15 +101,101 @@ function multipolar_matrices(; N)
     T
 end
 
-function spin_multipoles_representation(; N)
-    S = spin_matrices(; N)
+function multipolar_components(S)
+    N = size(S,1)
     T = multipolar_matrices(; N)
-    M = zeros(ComplexF64,N^2-1,N)
-    for i = 1:(N^2-1), j = 1:3
-        M[i,j] = tr(T[i] * S[j])
+    M = zeros(ComplexF64,N^2-1)
+    for i = 1:(N^2-1)
+        M[i] = tr(T[i]' * S) / tr(T[i]' * T[i])
     end
+    M
+end
+
+function show_inner_products(M)
+  l = length(M)
+  p = zeros(ComplexF64,l,l)
+  for i = 1:l, j = 1:l
+    p[i,j] = tr(M[i]' * M[j])
+  end
+  p
+end
+
+function spin_multipoles_representation(; N)
+    traceless_symmetrize(x) = (x+x')./2 - tr(x + x')/(2N) * I(N)
+    S = spin_matrices(; N)
+    function make_polynomial_matrix(S,qs)
+        poly_matrix = I(N)
+        for i in qs
+            poly_matrix = poly_matrix * S[i]
+        end
+        traceless_symmetrize(poly_matrix)
+    end
+    rot_spin_polynomial_matrices = Vector{Matrix{ComplexF64}}(undef,N^2-1)
+    spin_polynomial_matrices = Vector{Matrix{ComplexF64}}(undef,N^2-1)
+    flat_matrix = Matrix{ComplexF64}(undef,N^2,N^2-1)
+    flat_matrix .= 0
+    spin_polynomials = Vector{Tuple}(undef,N^2-1)
+    km = 0
+    for d = 1:(N-1)
+        for qs = CartesianIndices(ntuple(i -> 3,d))
+            if d == 2 && qs.I == (3,3) # Discard Sz^2
+              continue
+            end
+            poly_matrix = make_polynomial_matrix(S,qs.I)
+            flag = false
+            #=
+            for k = 1:km
+                P = spin_polynomial_matrices[k]
+                if isapprox(tr(poly_matrix' * P)^2, tr(poly_matrix' * poly_matrix) * tr(P' * P), atol = 1e-8)
+                    flag = true
+                end
+            end
+            =#
+            if rank([flat_matrix poly_matrix[:]]) != rank(flat_matrix) + 1
+                #display(flat_matrix)
+                #display([flat_matrix poly_matrix[:]])
+                #display(rank([flat_matrix poly_matrix[:]]))
+                #display(rank(flat_matrix))
+                flag = true
+            end
+            if !flag
+                km = km + 1
+                flat_matrix[:,km] = poly_matrix[:]
+                spin_polynomial_matrices[km] = poly_matrix
+                spin_polynomials[km] = qs.I
+            end
+        end
+    end
+    foreach(display,spin_polynomial_matrices)
+    display(spin_polynomials)
+    T = multipolar_matrices(; N)
+
+    # Write the spin polynomial matrices in terms of the multipolar_matrices basis:
+    # spin_polynomial_matrices[j] = M[i,j] * T[i]
+    # Like (B1) of **PhysRevB.104.104409**
+    M = zeros(ComplexF64,N^2-1,N^2-1)
+    for i = 1:(N^2-1), j = 1:(N^2-1)
+        M[i,j] = tr(T[i]' * spin_polynomial_matrices[j]) / sqrt(tr(T[i]' * T[i]))
+    end
+
     function ρ(R)
-        M * R * M'
+        Srot = Vector{Matrix{ComplexF64}}(undef,3)
+        for i = 1:3
+            Srot[i] = zeros(ComplexF64,N,N)
+            for j = 1:3
+                Srot[i] += R[i,j] * S[j]
+            end
+        end
+        for k = 1:km
+            rot_spin_polynomial_matrices[k] = make_polynomial_matrix(Srot,spin_polynomials[k])
+        end
+
+        # rot_spin_polynomial_matrices[j] = Mrot[i,j] * T[i]
+        Mrot = zeros(ComplexF64,N^2-1,N^2-1)
+        for i = 1:(N^2-1), j = 1:(N^2-1)
+            Mrot[i,j] = tr(T[i]' * rot_spin_polynomial_matrices[j]) / sqrt(tr(T[i]' * T[i]))
+        end
+        inv(Mrot) * M
     end
 end
 

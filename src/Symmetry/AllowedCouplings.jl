@@ -195,11 +195,11 @@ end
 Returns a list of ``3×3`` matrices that form a linear basis for the
 symmetry-allowed coupling matrices associated with bond `b`.
 """
-function basis_for_symmetry_allowed_couplings(cryst::Crystal, b::BondPos)
+function basis_for_symmetry_allowed_couplings(cryst::Crystal, b::BondPos, ρ)
     # Expected floating point precision for 9x9 matrix operations
     atol = 1e-12
 
-    P = symmetry_allowed_couplings_operator(cryst, b)
+    P = symmetry_allowed_couplings_operator(cryst, b, ρ)
     # Any solution to the original symmetry constraints `R J Rᵀ = J` or `R J Rᵀ
     # = Jᵀ` decomposes into purely symmetric/antisymmetric solutions. Therefore
     # we can pick a basis that separates into symmetric and antisymmetric parts.
@@ -253,14 +253,14 @@ function basis_for_symmetry_allowed_couplings(cryst::Crystal, b::BondPos)
         x = Mat3(reshape(x, 3, 3))
         
         # Double check that x indeed satifies the necessary symmetries
-        @assert is_coupling_valid(cryst, b, x)
+        @assert is_coupling_valid(cryst, b, ρ, x)
 
         return x
     end
 end
 
-function basis_for_symmetry_allowed_couplings(cryst::Crystal, b::Bond)
-    return basis_for_symmetry_allowed_couplings(cryst, BondPos(cryst, b))
+function basis_for_symmetry_allowed_couplings(cryst::Crystal, b::Bond, ρ)
+    return basis_for_symmetry_allowed_couplings(cryst, BondPos(cryst, b), ρ)
 end
 
 function transform_coupling_for_bonds(cryst, b, b_ref, ρ, J_ref)

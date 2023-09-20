@@ -55,7 +55,20 @@ function push_coupling!(sys, couplings, bond, bilin, biquad, large_S)
 
     # Otherwise, add the new coupling to the list
     isculled = bond_parity(bond)
-    push!(couplings, PairCoupling(isculled, bond, bilin, biquad))
+
+    # TODO: re-add biquad
+    N = sys.Ns[1]
+    matrix = Matrix{ComplexF64}(undef, N^2-1, N^2-1)
+    matrix .= 0
+    if bilin isa Float64
+      matrix[1,1] = bilin
+      matrix[2,2] = bilin
+      matrix[3,3] = bilin
+    else
+      matrix[1:3,1:3] .= bilin
+    end
+    println("Neglecting biquad :(")
+    push!(couplings, PairCoupling(isculled, bond, matrix))
     sort!(couplings, by=c->c.isculled)
     
     return

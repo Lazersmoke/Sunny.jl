@@ -71,7 +71,8 @@ end
 
 # Converts a list of basis elements for a J matrix into a nice string summary
 function coupling_basis_strings(coup_basis; digits, atol) :: Matrix{String}
-    J = [String[] for _ in 1:3, _ in 1:3]
+    L = size(first(coup_basis)[2],1)
+    J = [String[] for _ in 1:L, _ in 1:L]
     for (letter, basis_mat) in coup_basis
         for idx in eachindex(basis_mat)
             coeff = basis_mat[idx]
@@ -83,14 +84,15 @@ function coupling_basis_strings(coup_basis; digits, atol) :: Matrix{String}
     end
     return map(J) do terms
         if isempty(terms)
-            "0"
+            #"0"
+            "⋅"
         else
             replace(join(terms, "+"), "+-" => "-")
         end
     end
 end
 
-function basis_for_exchange_on_bond(cryst::Crystal, b::Bond; b_ref)
+function basis_for_exchange_on_bond(cryst::Crystal, b::Bond, ρ; b_ref)
     # If `b_ref` is nothing, select it from reference_bonds()
     b_ref = @something b_ref begin
         d = global_distance(cryst, b)
@@ -99,7 +101,7 @@ function basis_for_exchange_on_bond(cryst::Crystal, b::Bond; b_ref)
     end
 
     # Get the coupling basis on reference bond
-    basis = basis_for_symmetry_allowed_couplings(cryst, b_ref)
+    basis = basis_for_symmetry_allowed_couplings(cryst, b_ref, ρ)
     # Transform coupling basis from `b_ref` to `b`
     if b != b_ref
         basis = map(basis) do J_ref
@@ -111,14 +113,17 @@ function basis_for_exchange_on_bond(cryst::Crystal, b::Bond; b_ref)
 end
 
 function print_formatted_matrix(elemstrs; prefix, io=stdout)
+    L = size(elemstrs,2)
     max_col_len = [maximum(length.(col)) for col in eachcol(elemstrs)]
-    max_col_len = repeat(max_col_len', 3)
+    max_col_len = repeat(max_col_len', L)
     padded_elems = repeat.(' ', max_col_len .- length.(elemstrs)) .* elemstrs
 
     spacing = repeat(' ', length(prefix) + 1)
-    println(io, """$prefix[$(join(padded_elems[1,:], " "))
-                   $spacing$(join(padded_elems[2,:], " "))
-                   $spacing$(join(padded_elems[3,:], " "))]""")
+    println(io, "$prefix[$(join(padded_elems[1,:], " "))")
+    for j = 2:L-1
+        println(io, "$spacing$(join(padded_elems[j,:], " "))")
+    end
+    println(io, "$spacing$(join(padded_elems[L,:], " "))]")
 end
 
 """
@@ -158,12 +163,20 @@ function print_bond(cryst::Crystal, b::Bond, ρ; b_ref=nothing, io=stdout)
         end
     end
 
-    basis = basis_for_exchange_on_bond(cryst, b; b_ref)
+    basis = basis_for_exchange_on_bond(cryst, b, ρ; b_ref)
     basis_strs = coupling_basis_strings(zip('A':'Z', basis); digits, atol)
     print_formatted_matrix(basis_strs; prefix="Allowed exchange matrix:", io)
 
+    # TODO: DM vector doesn't generalize nicely to higher multipoles
+    # This is a hack which checks whether ρ is the identity on 3x3 matrices, which is the
+    # only case where DM vector is really defined
+    fails_to_be_vector_repr = size(ρ(I(3))) != (3,3)
+    for m = [[0 1 0; -1 0 0; 0 0 0], [0 0 1; 0 0 0; -1 0 0], [0 0 0; 0 0 1; 0 -1 0]]
+        fails_to_be_vector_repr = fails_to_be_vector_repr || !(isapprox(ρ(m),m;atol = 1e-12))
+    end
+
     antisym_basis_idxs = findall(J -> J ≈ -J', basis)
-    if !isempty(antisym_basis_idxs)
+    if !fails_to_be_vector_repr && !isempty(antisym_basis_idxs)
         antisym_basis_strs = coupling_basis_strings(collect(zip('A':'Z', basis))[antisym_basis_idxs]; digits, atol)
         println(io, "Allowed DM vector: [$(antisym_basis_strs[2,3]) $(antisym_basis_strs[3,1]) $(antisym_basis_strs[1,2])]")
     end
@@ -239,7 +252,7 @@ function print_site(cryst, i, ρ; R=Mat3(I), ks=[2,4,6], io=stdout)
     basis = basis_for_symmetry_allowed_couplings(cryst, Bond(i, i, [0,0,0]), ρ)
     # TODO: `R` should be passed to `basis_for_symmetry_allowed_couplings` to
     # get a nicer basis.
-    basis = [R * b * R' for b in basis]
+    basis = [ρ(R) * b * ρ(R') for b in basis]
     basis_strs = coupling_basis_strings(zip('A':'Z', basis); digits, atol)
     print_formatted_matrix(basis_strs; prefix="Allowed g-tensor: ", io)
 

@@ -84,6 +84,22 @@ function dipolar_part(Q)
     error("NYI")
 end
 
+function physical_basis_su3()
+    S = 1
+    dipole_operators = spin_matrices(; N=2S+1)
+    Sx, Sy, Sz = dipole_operators
+
+    # we choose a particular basis of the quadrupole operators listed in Appendix B of *Phys. Rev. B 104, 104409*
+    quadrupole_operators = Vector{Matrix{ComplexF64}}(undef, 5)
+    quadrupole_operators[1] = -(Sx * Sz + Sz * Sx)
+    quadrupole_operators[2] = -(Sy * Sz + Sz * Sy)
+    quadrupole_operators[3] = Sx * Sx - Sy * Sy
+    quadrupole_operators[4] = Sx * Sy + Sy * Sx
+    quadrupole_operators[5] = √3 * Sz * Sz - 1/√3 * S * (S+1) * I
+
+    [dipole_operators; quadrupole_operators]
+end
+
 function multipolar_matrices(; N)
     T = Vector{Matrix{ComplexF64}}(undef,N^2-1)
     li = LinearIndices(zeros(N,N))
@@ -120,55 +136,64 @@ function show_inner_products(M)
   p
 end
 
-function spin_multipoles_representation(; N)
+function spin_multipoles_representation(; N, T = multipolar_matrices(; N))
+    # Make a matrix A = A', and subtract the trace
     traceless_symmetrize(x) = (x+x')./2 - tr(x + x')/(2N) * I(N)
     S = spin_matrices(; N)
+
+    # Build the matrix
+    #
+    #   S[qs[1]] * S[qs[2]] * ... * S[qs[end]]
+    #
+    # which is a product of spin matrices
     function make_polynomial_matrix(S,qs)
-        poly_matrix = I(N)
+        prod_matrix = I(N)
         for i in qs
-            poly_matrix = poly_matrix * S[i]
+            prod_matrix = prod_matrix * S[i]
         end
-        traceless_symmetrize(poly_matrix)
+        traceless_symmetrize(prod_matrix)
     end
-    rot_spin_polynomial_matrices = Vector{Matrix{ComplexF64}}(undef,N^2-1)
+
+    # This will hold a basis for su(N) [dimension (N^2-1)] where each basis vector
+    # is a product of spin matrices, see above.
     spin_polynomial_matrices = Vector{Matrix{ComplexF64}}(undef,N^2-1)
+    # Holds the qs for each basis vector:
+    spin_polynomials = Vector{Tuple}(undef,N^2-1)
+
+    # Same as spin_polynomial_matrices, but flattened
     flat_matrix = Matrix{ComplexF64}(undef,N^2,N^2-1)
     flat_matrix .= 0
-    spin_polynomials = Vector{Tuple}(undef,N^2-1)
+
+    # We now iteratively construct the aforementioned basis.
+    # km keeps track of our progress
     km = 0
+
+    # d = length(qs) is the number of factors in the product
     for d = 1:(N-1)
+        # Loop over each factor being (Sx,Sy,Sz)
         for qs = CartesianIndices(ntuple(i -> 3,d))
-            if d == 2 && qs.I == (3,3) # Discard Sz^2
-              continue
+            if d == 2 && qs.I == (3,3) # Discard Sz^2 explicitly (only applies to N > 2)
+                continue
             end
-            poly_matrix = make_polynomial_matrix(S,qs.I)
-            flag = false
-            #=
-            for k = 1:km
-                P = spin_polynomial_matrices[k]
-                if isapprox(tr(poly_matrix' * P)^2, tr(poly_matrix' * poly_matrix) * tr(P' * P), atol = 1e-8)
-                    flag = true
-                end
-            end
-            =#
-            if rank([flat_matrix poly_matrix[:]]) != rank(flat_matrix) + 1
-                #display(flat_matrix)
-                #display([flat_matrix poly_matrix[:]])
-                #display(rank([flat_matrix poly_matrix[:]]))
-                #display(rank(flat_matrix))
-                flag = true
-            end
-            if !flag
+            candidate_basis_vector = make_polynomial_matrix(S,qs.I)
+
+            # If the candidate is linearly independent (increases rank by one)
+            # then add it to the basis
+            if rank([flat_matrix candidate_basis_vector[:]]) == rank(flat_matrix) + 1
                 km = km + 1
-                flat_matrix[:,km] = poly_matrix[:]
-                spin_polynomial_matrices[km] = poly_matrix
+                @assert km <= N^2 - 1
+                flat_matrix[:,km] = candidate_basis_vector[:]
+                spin_polynomial_matrices[km] = candidate_basis_vector
                 spin_polynomials[km] = qs.I
             end
         end
     end
-    foreach(display,spin_polynomial_matrices)
-    display(spin_polynomials)
-    T = multipolar_matrices(; N)
+
+    # Assert that we have all (and only all) of the basis vectors
+    @assert km == (N^2 - 1)
+
+    #foreach(display,spin_polynomial_matrices)
+    #display(spin_polynomials)
 
     # Write the spin polynomial matrices in terms of the multipolar_matrices basis:
     # spin_polynomial_matrices[j] = M[i,j] * T[i]
@@ -178,6 +203,10 @@ function spin_multipoles_representation(; N)
         M[i,j] = tr(T[i]' * spin_polynomial_matrices[j]) / sqrt(tr(T[i]' * T[i]))
     end
 
+    # The spin matrix products all transform in a known way under physical space
+    # rotations, so we perform the rotation on the spin product matrices, and
+    # transform that rotation to construct the action on the multipolar_matrices
+    rot_spin_polynomial_matrices = Vector{Matrix{ComplexF64}}(undef,N^2-1)
     function ρ(R)
         Srot = Vector{Matrix{ComplexF64}}(undef,3)
         for i = 1:3
@@ -190,12 +219,21 @@ function spin_multipoles_representation(; N)
             rot_spin_polynomial_matrices[k] = make_polynomial_matrix(Srot,spin_polynomials[k])
         end
 
+        # As above:
         # rot_spin_polynomial_matrices[j] = Mrot[i,j] * T[i]
         Mrot = zeros(ComplexF64,N^2-1,N^2-1)
         for i = 1:(N^2-1), j = 1:(N^2-1)
             Mrot[i,j] = tr(T[i]' * rot_spin_polynomial_matrices[j]) / sqrt(tr(T[i]' * T[i]))
         end
-        inv(Mrot) * M
+
+        # M,Mrot ~ [multipole operators] x [spin polynomial operators]
+        # inv(M),inv(Mrot) ~ [spin polynomial operators] x [multipole operators]
+        # J ~ [multipole operators (rotated)] x [multipole operators]
+        #
+        # and we act as ρ(R) * J * ρ(R')
+
+        #inv(Mrot) * M # ~ [spin polynomial operators (rotated)] x [spin polynomial operators]
+        real(Mrot * inv(M)) # ~ [multipole operators (rotated)] x [multipole operators]
     end
 end
 

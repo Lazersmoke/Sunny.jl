@@ -84,6 +84,15 @@ const transpose_op_3x3 = [
     0 0 0  0 0 0  0 0 1
 ]
 
+function transpose_op(L)
+    M = zeros(Bool, L^2,L^2)
+    for i = 1:L, j = 1:L
+        # Trust me
+        M[(i-1)*L + j,(j-1)*L + i] = 1
+    end
+    M
+end
+
 
 # Returns a projection operator P that maps to zero any symmetry-unallowed
 # coupling matrix J. The space spanned by the eigenvectors of P with eigenvalue
@@ -95,7 +104,7 @@ function projector_for_symop(cryst::Crystal, s::SymOp, parity::Bool, ρ)
     R = ρ(R)
 
     # Constraint is modeled as `F J = 0`
-    F = kron(R, R) - (parity ? I : transpose_op_3x3)
+    F = kron(R, transpose(inv(R))) - (parity ? I : transpose_op(size(R,1)))
 
     # Orthogonal column vectors that span the null space of F
     v = nullspace(F; atol=1e-12)
@@ -199,6 +208,23 @@ function basis_for_symmetry_allowed_couplings(cryst::Crystal, b::BondPos, ρ)
     # Expected floating point precision for 9x9 matrix operations
     atol = 1e-12
 
+    identity_representation = ρ(I(3))
+    L = size(identity_representation,1)
+    one_hot(i) = I(L)[:,i]
+    sym_basis = Vector{Matrix{Float64}}(undef,0)
+    asym_basis = Vector{Matrix{Float64}}(undef,0)
+    for i = 1:L
+        push!(sym_basis, diagm(one_hot(i)))
+        for j = (i+1):L
+            push!(sym_basis,(one_hot(i) * one_hot(j)' + one_hot(j) * one_hot(i)') ./ √2)
+            push!(asym_basis,(one_hot(i) * one_hot(j)' - one_hot(j) * one_hot(i)') ./ √2)
+        end
+    end
+    sym_basis = hcat(reshape.(sym_basis, L^2)...)
+    asym_basis = hcat(reshape.(asym_basis, L^2)...)
+
+    @assert sym_basis * sym_basis' + asym_basis * asym_basis' ≈ I
+
     P = symmetry_allowed_couplings_operator(cryst, b, ρ)
     # Any solution to the original symmetry constraints `R J Rᵀ = J` or `R J Rᵀ
     # = Jᵀ` decomposes into purely symmetric/antisymmetric solutions. Therefore
@@ -249,8 +275,8 @@ function basis_for_symmetry_allowed_couplings(cryst::Crystal, b::BondPos, ρ)
         _, i = findmax(abs.(x.+atol))
         x = x / x[i]
 
-        # Reinterpret as 3x3 matrix
-        x = Mat3(reshape(x, 3, 3))
+        # Reinterpret as matrix
+        x = SMatrix{L,L}(reshape(x, L, L))
         
         # Double check that x indeed satifies the necessary symmetries
         @assert is_coupling_valid(cryst, b, ρ, x)

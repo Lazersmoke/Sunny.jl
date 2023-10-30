@@ -16,6 +16,24 @@ function bose_function(kT, x)
     return 1 / (exp(x/kT) - 1)
 end
 
+"""
+    regularization_function(ω,σ)
+
+Returns a regularization factor to apply to the intensity at low energy according to a smooth approximation to a step function
+with width, σ. 
+
+"""
+
+function regularization_function(ω,σ)
+    if ω < 0 
+        return 0.0
+    elseif 0 ≤ ω ≤ σ
+        return (4 - (3ω ./σ)) .*(ω.^3/σ.^3)
+    else
+        return 1.0
+    end
+end
+
 
 """
     get_all_coefficients(M, ωs, broadening, σ, kT,γ)  
@@ -23,10 +41,29 @@ end
 Retrieves the Chebyshev coefficients up to index, M for a user-defined lineshape. A numerical regularization is applied to
 treat the divergence of the dynamical correlation function at small energy. Here, σ² represents an energy cutoff scale 
 which should be related to the energy resolution. γ is the maximum eigenvalue used to rescale the spectrum to lie on the
-interval [-1,1]. 
+interval [-1,1]. Regularization is treated using a cubic cutoff function and the negative eigenvalues are zeroed out.
 
 """
 function get_all_coefficients(M, ωs, broadening, σ, kT,γ)
+    f(ω, x) = regularization_function(x,σ) * broadening(ω, x*γ, σ) * (1 + bose_function(kT, x))
+    output = OffsetArray(zeros(M, length(ωs)), 0:M-1, 1:length(ωs))
+    for i in eachindex(ωs)
+        output[:, i] = cheb_coefs(M, 2M, x -> f(ωs[i], x), (-1, 1))
+    end
+    return output
+end
+
+
+"""
+    get_all_coefficients_legacy(M, ωs, broadening, σ, kT,γ)  
+
+Retrieves the Chebyshev coefficients up to index, M for a user-defined lineshape. A numerical regularization is applied to
+treat the divergence of the dynamical correlation function at small energy. Here, σ² represents an energy cutoff scale 
+which should be related to the energy resolution. γ is the maximum eigenvalue used to rescale the spectrum to lie on the
+interval [-1,1]. Regularization is treated using a tanh cutoff function and the negative eigenvalues are not zeroed out.
+
+"""
+function get_all_coefficients_legacy(M, ωs, broadening, σ, kT,γ)
     f(ω, x) = tanh((x/σ)^2) * broadening(ω, x*γ, σ) * (1 + bose_function(kT, x))
     output = OffsetArray(zeros(M, length(ωs)), 0:M-1, 1:length(ωs))
     for i in eachindex(ωs)

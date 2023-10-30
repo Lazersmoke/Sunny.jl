@@ -44,11 +44,11 @@ which should be related to the energy resolution. γ is the maximum eigenvalue u
 interval [-1,1]. Regularization is treated using a cubic cutoff function and the negative eigenvalues are zeroed out.
 
 """
-function get_all_coefficients(M, ωs, broadening, σ, kT,γ; regularization_style)
+function get_all_coefficients(M, ωs, broadening, σ, kT,γ;η=0.05, regularization_style)
     f = if regularization_style == :cubic
-      (ω,x) -> regularization_function(x,σ) * broadening(ω, x*γ, σ) * (1 + bose_function(kT, x*γ))
+      (ω,x) -> regularization_function(x,η*σ) * broadening(ω, x*γ, σ) * (1 + bose_function(kT, x*γ))
     elseif regularization_style == :tanh
-      (ω,x) -> tanh((x/σ)^2) * broadening(ω, x*γ, σ) * (1 + bose_function(kT, x*γ))
+      (ω,x) -> tanh((x/(η*σ))^2) * broadening(ω, x*γ, σ) * (1 + bose_function(kT, x*γ))
     elseif regularization_style == :none
       (ω,x) -> broadening(ω, x*γ, σ) * (1 + bose_function(kT, x*γ))
     elseif regularization_style == :outside
@@ -177,15 +177,15 @@ function kpm_dssf(swt::SpinWaveTheory, qs,ωlist,P::Int64,kT,σ,broadening; kern
             mul!(α0,Ĩ,u[β,:]) # calculate α0
             mul!(α1,A,α0) # calculate α1   
             for α=1:3
-                chebyshev_moments[α,β,qidx,0] =  (dot(u[α,:],α0))
-                chebyshev_moments[α,β,qidx,1] =  (dot(u[α,:],α1)) 
+                chebyshev_moments[α,β,qidx,0] =  (dot(u[α,:],α0)) #removed symmetrization
+                chebyshev_moments[α,β,qidx,1] =  (dot(u[α,:],α1)) #removed symmetrization
             end
             for m=2:P-1
                 αnew = zeros(ComplexF64,2*nmodes) 
                 mul!(αnew,A,α1)
                 @. αnew = 2*αnew - α0
                 for α=1:3
-                    chebyshev_moments[α,β,qidx,m] = (dot(u[α,:],αnew))
+                    chebyshev_moments[α,β,qidx,m] = (dot(u[α,:],αnew)) #removed symmetrization
                 end
                 (α1, α0) = (αnew, α1)
             end
@@ -326,15 +326,15 @@ function intensity_formula_kpm(f,swt::SpinWaveTheory,corr_ix::AbstractVector{Int
             mul!(α0,Ĩ,u[β,:]) # calculate α0
             mul!(α1,A,α0) # calculate α1
             for α=1:3
-                chebyshev_moments[α,β,0] =  dot(u[α,:],α0)
-                chebyshev_moments[α,β,1] =  dot(u[α,:],α1)
+                chebyshev_moments[α,β,0] =  (dot(u[α,:],α0)) #removed symmetrization
+                chebyshev_moments[α,β,1] =  (dot(u[α,:],α1)) #removed symmetrization
             end
             for m=2:P-1
                 αnew = zeros(ComplexF64,2*nmodes)
                 mul!(αnew,A,α1)
                 @. αnew = 2*αnew - α0
                 for α=1:3
-                    chebyshev_moments[α,β,m] = dot(u[α,:],αnew)
+                    chebyshev_moments[α,β,m] = (dot(u[α,:],αnew)) #removed symmetrization
                 end
                 (α1, α0) = (αnew, α1)
             end

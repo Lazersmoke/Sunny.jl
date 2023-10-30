@@ -98,7 +98,7 @@ function kpm_dssf(swt::SpinWaveTheory, qs,ωlist,P::Int64,kT,σ,broadening; kern
             # note that d is the chemical coordinates
             chemical_coor = positions_chem[site] # find chemical coords
             phase = exp(2*im * π  * dot(q, chemical_coor)) # calculate phase
-            Avec_pref[site] = sqrt_Nm_inv * phase * sqrt_M # define the prefactor of the tS matrices
+            Avec_pref[site] = sqrt_Nm_inv * phase  # define the prefactor of the tS matrices
         end
         # calculate u(q)
         if sys.mode == :SUN
@@ -243,7 +243,7 @@ function intensity_formula_kpm(f,swt::SpinWaveTheory,corr_ix::AbstractVector{Int
             # note that d is the chemical coordinates
             chemical_coor = positions_chem[site] # find chemical coords
             phase = exp(2*im * π  * dot(q, chemical_coor)) # calculate phase
-            Avec_pref[site] = sqrt_Nm_inv * phase * sqrt_M # define the prefactor of the tS matrices
+            Avec_pref[site] = sqrt_Nm_inv * phase  # define the prefactor of the tS matrices
         end
         # calculate u(q)
         if sys.mode == :SUN

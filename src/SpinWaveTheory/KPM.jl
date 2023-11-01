@@ -46,9 +46,9 @@ interval [-1,1]. Regularization is treated using a cubic cutoff function and the
 """
 function get_all_coefficients(M, ωs, broadening, σ, kT,γ;η=0.05, regularization_style)
     f = if regularization_style == :cubic
-      (ω,x) -> regularization_function(x,η*σ) * broadening(ω, x*γ, σ) * (1 + bose_function(kT, x*γ))
+      (ω,x) -> regularization_function(γ*x,η*σ) * broadening(ω, x*γ, σ) * (1 + bose_function(kT, x*γ))
     elseif regularization_style == :tanh
-      (ω,x) -> tanh((x/(η*σ))^2) * broadening(ω, x*γ, σ) * (1 + bose_function(kT, x*γ))
+      (ω,x) -> tanh((γ*x/(η*σ))^2) * broadening(ω, x*γ, σ) * (1 + bose_function(kT, x*γ))
     elseif regularization_style == :none
       (ω,x) -> broadening(ω, x*γ, σ) * (1 + bose_function(kT, x*γ))
     elseif regularization_style == :outside

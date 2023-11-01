@@ -46,11 +46,11 @@ interval [-1,1]. Regularization is treated using a cubic cutoff function and the
 """
 function get_all_coefficients(M, ωs, broadening, σ, kT,γ; regularization_style)
     f = if regularization_style == :cubic
-      (ω,x) -> regularization_function(x,σ) * broadening(ω, x*γ, σ) * (1 + bose_function(kT, x))
+      (ω,x) -> regularization_function(x,σ) * broadening(ω, x*γ, σ) * (1 + bose_function(kT, x*γ))
     elseif regularization_style == :tanh
-      (ω,x) -> tanh((x/σ)^2) * broadening(ω, x*γ, σ) * (1 + bose_function(kT, x))
+      (ω,x) -> tanh((x/σ)^2) * broadening(ω, x*γ, σ) * (1 + bose_function(kT, x*γ))
     elseif regularization_style == :none
-      (ω,x) -> broadening(ω, x*γ, σ) * (1 + bose_function(kT, x))
+      (ω,x) -> broadening(ω, x*γ, σ) * (1 + bose_function(kT, x*γ))
     elseif regularization_style == :outside
       (ω,x) -> broadening(ω, x*γ, σ) * (1 + bose_function(kT, ω))
     end
@@ -137,9 +137,9 @@ function kpm_dssf(swt::SpinWaveTheory, qs,ωlist,P::Int64,kT,σ,broadening; kern
         end
         D = 2.0*sparse(Hmat) # calculate D (factor of 2 for correspondence)  
         lo,hi = Sunny.eigbounds(Ĩ*D,n_iters; extend=0.25) # calculate bounds
-		display(lanczos_legacy(Ĩ*D*Ĩ*D, n_iters) |> eigvals |> xs -> (first(xs), last(xs)))
 
         γ=max(lo,hi) # select upper bound (combine with the preceeding line later)
+        display(γ)
         A = Ĩ*D / γ
         # u(q) calculation)
         for site = 1:Nm
@@ -287,7 +287,7 @@ function intensity_formula_kpm(f,swt::SpinWaveTheory,corr_ix::AbstractVector{Int
         end
         D = 2.0*sparse(Hmat) # calculate D (factor of 2 for correspondence)  
         lo,hi = Sunny.eigbounds(Ĩ*D,n_iters; extend=0.25) # calculate bounds
-        display(Sunny.lanczos(Ĩ*D,n_iters) |> eigvals)
+
         γ=max(lo,hi) # select upper bound (combine with the preceeding line later)
         A = Ĩ*D / γ
         # u(q) calculation)

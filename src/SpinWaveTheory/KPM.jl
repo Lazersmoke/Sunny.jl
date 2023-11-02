@@ -13,7 +13,11 @@ Returns the Bose occupation factor for energy, x, at temperature kT.
 """
 
 function bose_function(kT, x) 
-    return 1 / (exp(x/kT) - 1)
+    r =  1 / (exp(x/kT) - 1)
+    if isinf(r)
+      return 0.
+    end
+    return r
 end
 
 """
@@ -277,6 +281,8 @@ function intensity_formula_kpm(f,swt::SpinWaveTheory,corr_ix::AbstractVector{Int
     calc_intensity = function(swt::SpinWaveTheory,q::Vec3)
         #_, q_reshaped = Sunny.chemical_to_magnetic(swt, q)
         q_reshaped = Sunny.to_reshaped_rlu(swt.sys, q)
+        q_absolute = swt.sys.crystal.recipvecs * q_reshaped
+        polar_mat = Sunny.polarization_matrix(q_absolute)
         u = zeros(ComplexF64,3,2*nmodes)
         if sys.mode == :SUN
             swt_hamiltonian_SUN!(Hmat, swt, q_reshaped)
@@ -345,13 +351,19 @@ function intensity_formula_kpm(f,swt::SpinWaveTheory,corr_ix::AbstractVector{Int
             ωdep = get_all_coefficients(P,ωlist,broadening,σ,kT,γ;regularization_style)
             apply_kernel(ωdep,kernel,P)
             Sαβ = Matrix{ComplexF64}(undef,3,3)
+            corrs = Vector{ComplexF64}(undef,num_correlations(swt.observables))
             for (iω,ω) = enumerate(ωlist)
                 for α=1:3
                     for β=1:3
                         Sαβ[α,β] = sum(chebyshev_moments[α,β,:] .* ωdep[:,iω])
                     end
                 end
-                intensity[iω] = f(q,Sαβ[corr_ix])
+
+                for (ci,i) in swt.observables.correlations
+                    (α,β) = ci.I
+                    corrs[i] = Sαβ[α,β]
+                end
+                intensity[iω] = f(q_absolute,corrs[corr_ix])
             end
             return intensity
         end

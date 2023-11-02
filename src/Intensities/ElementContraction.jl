@@ -193,13 +193,13 @@ end
 intensity_formula_kpm(swt::SpinWaveTheory; kwargs...) = intensity_formula_kpm(swt, :perp; kwargs...)
 function intensity_formula_kpm(swt::SpinWaveTheory, mode::Symbol; kwargs...)
     if mode == :trace
-        contractor = Trace(swt)
+        contractor = Trace(swt.observables)
         string_formula = "Tr S"
     elseif mode == :perp
-        contractor = DipoleFactor(swt)
+        contractor = DipoleFactor(swt.observables)
         string_formula = "∑_ij (I - Q⊗Q){i,j} S{i,j}\n\n(i,j = Sx,Sy,Sz)"
     elseif mode == :full
-        contractor = FullTensor(swt)
+        contractor = FullTensor(swt.observables)
         string_formula = "S{α,β}"
     end
     intensity_formula_kpm(swt,contractor;string_formula,kwargs...)

@@ -37,6 +37,21 @@ function cheb_coefs(N, Nsamp, func, bounds)
     return out
 end
 
+function view_cheb_samps(N, Nsamp, func, bounds)
+    @assert Nsamp >= N
+    xx = OffsetArray(zeros(Nsamp), 0:Nsamp-1) 
+    buf = OffsetArray(zeros(Nsamp), 0:Nsamp-1) 
+    out = OffsetArray(zeros(N),  0:N-1)
+    for i in 0:Nsamp-1
+        x_i = cos((i+0.5)π / Nsamp)
+        xx[i] = unscale(x_i, bounds)
+        buf[i] = func(unscale(x_i, bounds))
+    end
+    xx, buf
+end
+
+
+
 
 """
     cheb_eval(x, bounds, coefs::OffsetArray; kernel=nothing, maxN = nothing)

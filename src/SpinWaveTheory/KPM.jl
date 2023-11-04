@@ -38,6 +38,15 @@ function regularization_function(ω,σ)
     end
 end
 
+function srf(ω,σ)
+    if -σ ≤ ω ≤ σ
+        return (3(ω ./σ).^4 .- 2(ω ./σ).^6)
+    else
+        return 1.0
+    end
+end
+
+
 
 """
     get_all_coefficients(M, ωs, broadening, σ, kT,γ)  
@@ -55,8 +64,8 @@ function get_all_coefficients(M, ωs, broadening, σ, kT,γ;η=0.05, regularizat
       (ω,x) -> tanh((γ*x/(η*σ))^2) * broadening(ω, x*γ, σ) * (1 + bose_function(kT, x*γ))
     elseif regularization_style == :none
       (ω,x) -> broadening(ω, x*γ, σ) * (1 + bose_function(kT, x*γ))
-    elseif regularization_style == :outside
-      (ω,x) -> broadening(ω, x*γ, σ) * (1 + bose_function(kT, ω))
+    elseif regularization_style == :srf
+      (ω,x) -> srf(γ*x,η*σ) * broadening(ω, x*γ, σ) * (1 + bose_function(kT, x*γ))
     end
     output = OffsetArray(zeros(M, length(ωs)), 0:M-1, 1:length(ωs))
     for i in eachindex(ωs)
@@ -149,7 +158,7 @@ function kpm_dssf(swt::SpinWaveTheory, qs,ωlist,P::Int64,kT,σ,broadening; kern
         for site = 1:Nm
             # note that d is the chemical coordinates
             chemical_coor = swt.sys.crystal.positions[site] # find chemical coords
-            phase = exp(2*im * π  * dot(q, chemical_coor)) # calculate phase
+            phase = exp(2*im * π  * dot(q_reshaped, chemical_coor)) # calculate phase
             Avec_pref[site] = sqrt_Nm_inv * phase  # define the prefactor of the tS matrices
         end
         # calculate u(q)
@@ -300,7 +309,7 @@ function intensity_formula_kpm(f,swt::SpinWaveTheory,corr_ix::AbstractVector{Int
         for site = 1:Nm
             # note that d is the chemical coordinates
             chemical_coor = swt.sys.crystal.positions[site] # find chemical coords
-            phase = exp(2*im * π  * dot(q, chemical_coor)) # calculate phase
+            phase = exp(2*im * π  * dot(q_reshaped, chemical_coor)) # calculate phase
             Avec_pref[site] = sqrt_Nm_inv * phase  # define the prefactor of the tS matrices
         end
         # calculate u(q)

@@ -141,7 +141,6 @@ function kpm_dssf(swt::SpinWaveTheory, qs,ωlist,P::Int64,kT,σ,broadening; kern
         q = qs[qidx]
         q_reshaped = Sunny.to_reshaped_rlu(swt.sys, q)
         u = zeros(ComplexF64,3,2*nmodes)
-        multiply_by_hamiltonian!(y, x) = (swt.sys.mode == :SUN) ? multiply_by_hamiltonian_SUN!(y, x, swt, q_reshaped) : multiply_by_hamiltonian_dipole!(y, x, swt, q_reshaped)
         lo,hi = Sunny.eigbounds_MF(swt,q_reshaped,n_iters; extend=0.25) # calculate bounds
         γ=max(abs(lo),abs(hi)) # select upper bound (combine with the preceeding line later)
         # u(q) calculation)
@@ -154,7 +153,8 @@ function kpm_dssf(swt::SpinWaveTheory, qs,ωlist,P::Int64,kT,σ,broadening; kern
         # calculate u(q)
         if sys.mode == :SUN
             for site=1:Nm
-                @views tS_μ = data.dipole_operators[:, :, :, site]*Avec_pref[site] 
+                @assert size(data.observable_operators,3) == 3 # Assert that we have just 3 (hopefully dipole) operators
+                @views tS_μ = data.observable_operators[:, :, :, site]*Avec_pref[site] 
                 for μ=1:3
                     for j=2:N
                         u[μ,(j-1)+(site-1)*(N-1) ]=tS_μ[j,1,μ] 
@@ -178,7 +178,7 @@ function kpm_dssf(swt::SpinWaveTheory, qs,ωlist,P::Int64,kT,σ,broadening; kern
             α0 = zeros(ComplexF64,2*nmodes)
             α1 = zeros(ComplexF64,2*nmodes)
             mul!(α0,Ĩ,u[β,:]) # calculate α0
-            multiply_by_hamiltonian!(α1,α0)
+            multiply_by_hamiltonian!(α1,α0,swt,q_reshaped)
             mul!(α1,Ĩ,2α1/γ) 
             for α=1:3
                 chebyshev_moments[α,β,qidx,0] =  (dot(u[α,:],α0)) #removed symmetrization
@@ -186,7 +186,7 @@ function kpm_dssf(swt::SpinWaveTheory, qs,ωlist,P::Int64,kT,σ,broadening; kern
             end
             for m=2:P-1
                 αnew = zeros(ComplexF64,2*nmodes) 
-                multiply_by_hamiltonian!(αnew,a1)
+                multiply_by_hamiltonian!(αnew,a1,swt,q_reshaped)
                 mul!(αnew,Ĩ,2αnew/γ)
                 @. αnew = 2*αnew - α0
                 for α=1:3
@@ -260,6 +260,10 @@ function Base.show(io::IO, ::MIME"text/plain", formula::KPMIntensityFormula{T}) 
     println(io,"P = $(formula.P), kT = $(formula.kT), σ = $(formula.σ)")
 end
 
+"""
+    intensity_formula_kpm(swt, mode :: Symbol, broadening = (ω,xγ,σ) -> lorentzian(s)(ω-xγ), regularization_style = :cubic)
+
+"""
 function intensity_formula_kpm(f,swt::SpinWaveTheory,corr_ix::AbstractVector{Int64}; P =50, kT=Inf,σ=0.1,broadening, kernel=nothing , return_type = Float64, string_formula = "f(Q,ω,S{α,β}[ix_q,ix_ω])",regularization_style)
     # P is the max Chebyshyev coefficient
     (; sys, data) = swt
@@ -281,7 +285,6 @@ function intensity_formula_kpm(f,swt::SpinWaveTheory,corr_ix::AbstractVector{Int
         q_reshaped = Sunny.to_reshaped_rlu(sys, q)
         q_absolute = swt.sys.crystal.recipvecs * q_reshaped
         u = zeros(ComplexF64,3,2*nmodes)
-        multiply_by_hamiltonian!(y, x) = (swt.sys.mode == :SUN) ? multiply_by_hamiltonian_SUN!(y, x, swt, q_reshaped) : multiply_by_hamiltonian_dipole!(y, x, swt, q_reshaped)
         lo,hi = Sunny.eigbounds_MF(swt,q_reshaped,n_iters; extend=0.5) # calculate bounds
         γ=max(abs(lo),abs(hi)) # select upper bound (combine with the preceeding line later)
         # u(q) calculation
@@ -294,7 +297,8 @@ function intensity_formula_kpm(f,swt::SpinWaveTheory,corr_ix::AbstractVector{Int
         # calculate u(q)
         if sys.mode == :SUN
             for site=1:Nm
-                @views tS_μ = data.dipole_operators[:, :, :, site]*Avec_pref[site] 
+                @assert size(data.observable_operators,3) == 3 # Assert that we have just 3 (hopefully dipole) operators
+                @views tS_μ = data.observable_operators[:, :, :, site]*Avec_pref[site] 
                 for μ=1:3
                     for j=2:N
                         u[μ,(j-1)+(site-1)*(N-1) ]=tS_μ[j,1,μ]
@@ -318,7 +322,7 @@ function intensity_formula_kpm(f,swt::SpinWaveTheory,corr_ix::AbstractVector{Int
             α0 = zeros(ComplexF64,2*nmodes)
             α1 = zeros(ComplexF64,2*nmodes)
             mul!(α0,Ĩ,u[β,:]) # calculate α0
-            multiply_by_hamiltonian!(α1,α0)
+            multiply_by_hamiltonian!(α1,α0,swt,q_reshaped)
             mul!(α1,Ĩ,2α1/γ) 
             for α=1:3
                 chebyshev_moments[α,β,0] =  (dot(u[α,:],α0)) #removed symmetrization
@@ -326,7 +330,7 @@ function intensity_formula_kpm(f,swt::SpinWaveTheory,corr_ix::AbstractVector{Int
             end
             for m=2:P-1
                 αnew = zeros(ComplexF64,2*nmodes)
-                multiply_by_hamiltonian!(αnew,α1) 
+                multiply_by_hamiltonian!(αnew,α1,swt,q_reshaped) 
                 mul!(αnew,Ĩ,2αnew/γ)
                 @. αnew = 2*αnew - α0
                 for α=1:3

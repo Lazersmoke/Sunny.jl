@@ -21,6 +21,28 @@ import Spglib
 import RowEchelon: rref!
 
 include("MathBasics.jl")
+# Specific to KPM
+import SparseArrays: spzeros, sparse, spdiagm
+
+const Vec3 = SVector{3, Float64}
+const Vec5 = SVector{5, Float64}
+const Mat3 = SMatrix{3, 3, Float64, 9}
+const Mat5 = SMatrix{5, 5, Float64, 25}
+const CVec{N} = SVector{N, ComplexF64}
+const HermitianC64 = Hermitian{ComplexF64, Matrix{ComplexF64}}
+
+@static if VERSION < v"1.10"
+    hermitianpart(A) = Hermitian(A+A')/2
+
+    function hermitianpart!(A, uplo::Symbol=:U)
+        for i in CartesianIndices(A)
+            i, j = i.I
+            A[i,j] = (A[i,j] + conj(A[j,i]))/2
+            A[j,i] = conj(A[i,j])
+        end
+        return Hermitian(A, uplo)
+    end
+end
 
 include("Operators/Spin.jl")
 include("Operators/Rotation.jl")
@@ -79,7 +101,9 @@ include("SpinWaveTheory/HamiltonianSUN.jl")
 include("SpinWaveTheory/DispersionAndIntensities.jl")
 include("SpinWaveTheory/Lanczos.jl")
 include("SpinWaveTheory/LSWTCorrections.jl")
-export SpinWaveTheory, dispersion, dssf, delta_function_kernel
+include("SpinWaveTheory/Chebyshev.jl")
+include("SpinWaveTheory/KPM.jl")
+export SpinWaveTheory, dispersion, dssf, kpm_dssf, kpm_intensities, delta_function_kernel
 
 include("SampledCorrelations/SampledCorrelations.jl")
 include("SampledCorrelations/CorrelationUtils.jl")

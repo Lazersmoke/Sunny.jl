@@ -174,7 +174,7 @@ end
 
 function intensity_formula(sc::SampledCorrelations, elem::Tuple{Symbol,Symbol}; kwargs...)
     string_formula = "S{$(elem[1]),$(elem[2])}[ix_q,ix_ω]"
-    intensity_formula(sc,Element(sc, elem); string_formula, kwargs...)
+    intensity_formula(sc,Element(sc.observables, elem); string_formula, kwargs...)
 end
 
 function intensity_formula(sc::SampledCorrelations, mode::Symbol; kwargs...)

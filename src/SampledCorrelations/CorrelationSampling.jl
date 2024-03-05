@@ -90,7 +90,15 @@ function accum_sample!(sc::SampledCorrelations)
     (; data, M, observables, samplebuf, nsamples, fft!) = sc
     natoms = size(samplebuf)[5]
 
-    fft! * samplebuf # Apply pre-planned and pre-normalized FFT
+    rzb = zeros(ComplexF64,size(samplebuf)[1:5]...,size(samplebuf,6)*2)
+    rzb[:,:,:,:,:,1:size(samplebuf,6)] .= samplebuf / sqrt(prod(size(samplebuf)[2:4]))
+    FFTW.fft!(rzb,(2,3,4,6))
+    denom = zeros(size(samplebuf,6)*2)
+    denom[1:size(samplebuf,6)] .= 1
+    n_contrib = real(FFTW.ifft(FFTW.fft(denom) .* conj(FFTW.fft(denom))))
+    n_contrib[n_contrib .< 2] .= Inf
+
+    #fft! * samplebuf # Apply pre-planned and pre-normalized FFT
     count = nsamples[1] += 1
 
     # Note that iterating over the `correlations` (a SortedDict) causes
@@ -100,14 +108,16 @@ function accum_sample!(sc::SampledCorrelations)
     for j in 1:natoms, i in 1:natoms, (ci, c) in observables.correlations  
         α, β = ci.I
 
-        sample_α = @view samplebuf[α,:,:,:,i,:]
-        sample_β = @view samplebuf[β,:,:,:,j,:]
+        sample_α = @view rzb[α,:,:,:,i,:]
+        sample_β = @view rzb[β,:,:,:,j,:]
         databuf  = @view data[c,i,j,:,:,:,:]
+
+        corr = FFTW.fft(FFTW.ifft(sample_α .* conj.(sample_β)) ./ reshape(n_contrib,1,1,1,size(samplebuf,6)*2))
 
         if isnothing(M)
             for k in eachindex(databuf)
                 # Store the diff for one complex number on the stack.
-                diff = sample_α[k] * conj(sample_β[k]) - databuf[k]
+                diff = corr[k] - databuf[k]
 
                 # Accumulate into running average
                 databuf[k] += diff * (1/count)

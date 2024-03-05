@@ -154,7 +154,7 @@ function dynamical_correlations(sys::System{N}; Δt, nω, ωmax,
 
     # Preallocation
     na = natoms(sys.crystal)
-    samplebuf = zeros(ComplexF64, num_observables(observables), sys.latsize..., na, nω) 
+    samplebuf = zeros(ComplexF64, num_observables(observables), sys.latsize..., na, (nω÷2) + 1) 
     data = zeros(ComplexF64, num_correlations(observables), na, na, sys.latsize..., nω)
     M = calculate_errors ? zeros(Float64, size(data)...) : nothing
 

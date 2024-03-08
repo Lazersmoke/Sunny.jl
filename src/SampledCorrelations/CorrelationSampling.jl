@@ -28,16 +28,16 @@ function observable_values!(buf, sys::System{N}, ops) where N
     return nothing
 end
 
-function trajectory(sys::System{N}, Δt, nsnaps, ops; kwargs...) where N
+function trajectory(sys::System{N}, Δt, nsnaps, ops,cb; kwargs...) where N
     num_ops = length(ops)
 
     traj_buf = zeros(N == 0 ? Float64 : ComplexF64, num_ops, sys.latsize..., natoms(sys.crystal), nsnaps)
-    trajectory!(traj_buf, sys, Δt, nsnaps, ops; kwargs...)
+    trajectory!(traj_buf, sys, Δt, nsnaps, ops,cb; kwargs...)
 
     return traj_buf
 end
 
-function trajectory!(buf, sys, Δt, nsnaps, ops; measperiod = 1)
+function trajectory!(buf, sys, Δt, nsnaps, ops, cb; measperiod = 1)
     @assert length(ops) == size(buf, 1)
     integrator = ImplicitMidpoint(Δt)
 
@@ -45,6 +45,7 @@ function trajectory!(buf, sys, Δt, nsnaps, ops; measperiod = 1)
     for n in 2:nsnaps
         for _ in 1:measperiod
             step!(sys, integrator)
+            cb()
         end
         observable_values!(@view(buf[:,:,:,:,:,n]), sys, ops)
     end
@@ -52,12 +53,12 @@ function trajectory!(buf, sys, Δt, nsnaps, ops; measperiod = 1)
     return nothing
 end
 
-function new_sample!(sc::SampledCorrelations, sys::System)
+function new_sample!(sc::SampledCorrelations, sys::System,cb)
     (; Δt, samplebuf, measperiod, observables, processtraj!) = sc
     nsnaps = size(samplebuf, 6)
     @assert size(sys.dipoles) == size(samplebuf)[2:5] "`System` size not compatible with given `SampledCorrelations`"
 
-    trajectory!(samplebuf, sys, Δt, nsnaps, observables.observables; measperiod)
+    trajectory!(samplebuf, sys, Δt, nsnaps, observables.observables,cb; measperiod)
     processtraj!(sc)
 
     return nothing
@@ -90,13 +91,14 @@ function accum_sample!(sc::SampledCorrelations)
     (; data, M, observables, samplebuf, nsamples, fft!) = sc
     natoms = size(samplebuf)[5]
 
-    rzb = zeros(ComplexF64,size(samplebuf)[1:5]...,size(samplebuf,6)*2)
+    time_2T = 2size(samplebuf,6)-1
+    rzb = zeros(ComplexF64,size(samplebuf)[1:5]...,time_2T)
     rzb[:,:,:,:,:,1:size(samplebuf,6)] .= samplebuf / sqrt(prod(size(samplebuf)[2:4]))
     FFTW.fft!(rzb,(2,3,4,6))
-    denom = zeros(size(samplebuf,6)*2)
+    denom = zeros(time_2T)
     denom[1:size(samplebuf,6)] .= 1
-    n_contrib = real(FFTW.ifft(FFTW.fft(denom) .* conj(FFTW.fft(denom))))
-    n_contrib[n_contrib .< 2] .= Inf
+    n_contrib = size(samplebuf,6) .- abs.(FFTW.fftfreq(time_2T,time_2T))
+    n_contrib[n_contrib .== 0] .= Inf
 
     #fft! * samplebuf # Apply pre-planned and pre-normalized FFT
     count = nsamples[1] += 1
@@ -112,7 +114,7 @@ function accum_sample!(sc::SampledCorrelations)
         sample_β = @view rzb[β,:,:,:,j,:]
         databuf  = @view data[c,i,j,:,:,:,:]
 
-        corr = FFTW.fft(FFTW.ifft(sample_α .* conj.(sample_β)) ./ reshape(n_contrib,1,1,1,size(samplebuf,6)*2))
+        corr = FFTW.fft(FFTW.ifft(sample_α .* conj.(sample_β),4) ./ reshape(n_contrib,1,1,1,time_2T),4)
 
         if isnothing(M)
             for k in eachindex(databuf)
@@ -163,6 +165,6 @@ configuration may be copied into a new `System` and this new `System` can be
 passed to `add_sample!`.
 """
 function add_sample!(sc::SampledCorrelations, sys::System) 
-    new_sample!(sc, sys)
+    new_sample!(sc, sys,() -> nothing)
     accum_sample!(sc)
 end

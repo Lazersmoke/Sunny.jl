@@ -155,6 +155,7 @@ function dynamical_correlations(sys::System{N}; Δt, nω, ωmax,
     # Preallocation
     na = natoms(sys.crystal)
     samplebuf = zeros(ComplexF64, num_observables(observables), sys.latsize..., na, (nω÷2) + 1) 
+
     data = zeros(ComplexF64, num_correlations(observables), na, na, sys.latsize..., nω)
     M = calculate_errors ? zeros(Float64, size(data)...) : nothing
 
@@ -162,7 +163,7 @@ function dynamical_correlations(sys::System{N}; Δt, nω, ωmax,
     # This is designed so that when it enters ifft(fft * fft) later (in squared fashion)
     # it will result in the 1/N factor needed to average over the
     # N-many independent estimates of the correlation.
-    normalizationFactor = 1/(√(nω * prod(sys.latsize)))
+    normalizationFactor = 1/(√(prod(sys.latsize)))
     fft! = normalizationFactor * FFTW.plan_fft!(samplebuf, (2,3,4,6))
 
     # Other initialization

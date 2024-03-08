@@ -32,14 +32,14 @@ function trajectory(sys::System{N}, Δt, nsnaps, ops,cb; kwargs...) where N
     num_ops = length(ops)
 
     traj_buf = zeros(N == 0 ? Float64 : ComplexF64, num_ops, sys.latsize..., natoms(sys.crystal), nsnaps)
-    trajectory!(traj_buf, sys, Δt, nsnaps, ops,cb; kwargs...)
+    integrator = ImplicitMidpoint(Δt)
+    trajectory!(traj_buf, sys, Δt, nsnaps, ops,cb,integrator; kwargs...)
 
     return traj_buf
 end
 
-function trajectory!(buf, sys, Δt, nsnaps, ops, cb; measperiod = 1)
+function trajectory!(buf, sys, Δt, nsnaps, ops, cb,integrator; measperiod = 1)
     @assert length(ops) == size(buf, 1)
-    integrator = ImplicitMidpoint(Δt)
 
     observable_values!(@view(buf[:,:,:,:,:,1]), sys, ops)
     for n in 2:nsnaps
@@ -53,12 +53,12 @@ function trajectory!(buf, sys, Δt, nsnaps, ops, cb; measperiod = 1)
     return nothing
 end
 
-function new_sample!(sc::SampledCorrelations, sys::System,cb)
+function new_sample!(sc::SampledCorrelations, sys::System,cb,integrator)
     (; Δt, samplebuf, measperiod, observables, processtraj!) = sc
     nsnaps = size(samplebuf, 6)
     @assert size(sys.dipoles) == size(samplebuf)[2:5] "`System` size not compatible with given `SampledCorrelations`"
 
-    trajectory!(samplebuf, sys, Δt, nsnaps, observables.observables,cb; measperiod)
+    trajectory!(samplebuf, sys, Δt, nsnaps, observables.observables,cb,integrator; measperiod)
     processtraj!(sc)
 
     return nothing
@@ -165,6 +165,7 @@ configuration may be copied into a new `System` and this new `System` can be
 passed to `add_sample!`.
 """
 function add_sample!(sc::SampledCorrelations, sys::System) 
-    new_sample!(sc, sys,() -> nothing)
+    integrator = ImplicitMidpoint(sc.Δt)
+    new_sample!(sc, sys,() -> nothing,integrator)
     accum_sample!(sc)
 end

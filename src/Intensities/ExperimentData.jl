@@ -34,11 +34,13 @@ function generate_mantid_script_from_binning_parameters(params)
 end
 
 """
-    params, signal = load_nxs(filename)
+    params, signal = load_nxs(filename; [field = "signal"])
 
 Given the name of a Mantid-exported `MDHistoWorkspace` file, load the [`BinningParameters`](@ref) and the signal from that file.
+
+To load another field instead of the signal, specify e.g. `field = "errors_squared"`. Typical fields include `errors_squared`, `mask`, `num_events`, and `signal`.
 """
-function load_nxs(filename)
+function load_nxs(filename; field = "signal")
     JLD2.jldopen(filename,"r") do file
         read_covectors_from_axes_labels = false
         spatial_covectors = Matrix{Float64}(undef,3,3)
@@ -90,7 +92,7 @@ function load_nxs(filename)
           read_covectors_from_axes_labels = true
         end
 
-        signal = file["MDHistoWorkspace"]["data"]["signal"]
+        signal = file["MDHistoWorkspace"]["data"][field]
 
         axes = Dict(JLD2.load_attributes(file,"MDHistoWorkspace/data/signal"))[:axes]
 

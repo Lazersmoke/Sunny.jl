@@ -41,11 +41,11 @@ Given the name of a Mantid-exported `MDHistoWorkspace` file, load the [`BinningP
 function load_nxs(filename)
     JLD2.jldopen(filename,"r") do file
         read_covectors_from_axes_labels = false
-        covectors = Matrix{Float64}(undef,3,3)
+        spatial_covectors = Matrix{Float64}(undef,3,3)
         try
           try
             w_matrix = file["MDHistoWorkspace"]["experiment0"]["logs"]["W_MATRIX"]["value"]
-            covectors .= reshape(w_matrix,3,3) # No transpose because stored as column
+            spatial_covectors .= reshape(w_matrix,3,3) # No transpose because stored as column
           catch e
             printstyled("Warning",color=:yellow)
             print(": failed to load W_MATRIX from Mantid file $filename due to:\n")
@@ -80,7 +80,7 @@ function load_nxs(filename)
 
             # This is how you extract the covectors from `transform_from_orig` and `ub_matrix`
             # TODO: Parse this from the `long_name` of the data_dims instead
-            covectors .= 2π .* transform_from_orig[1:3,1:3] * ub_matrix
+            spatial_covectors .= 2π .* transform_from_orig[1:3,1:3] * ub_matrix
           end
         catch e
           printstyled("Warning",color=:yellow)
@@ -101,14 +101,21 @@ function load_nxs(filename)
         binwidth = Vector{Float64}(undef,4)
         binstart = Vector{Float64}(undef,4)
         binend = Vector{Float64}(undef,4)
+        covectors = zeros(Float64,4,4)
         std = x -> sqrt(sum((x .- sum(x) ./ length(x)).^2))
         for (i,name) in enumerate(axes_names)
-            if read_covectors_from_axes_labels
-                long_name = Dict(JLD2.load_attributes(file,"MDHistoWorkspace/data/$name"))[:long_name]
+            long_name = Dict(JLD2.load_attributes(file,"MDHistoWorkspace/data/$name"))[:long_name]
 
-                if i <= 3 # This is long_name contains a covector
-                    covectors[i,:] .= parse_long_name(long_name)
-                    covectors[i,:] .= transpose(pinv(covectors[i,:]))
+            if long_name == "DeltaE"
+                covectors[i,:] .= [0,0,0,1] # energy covector
+            else # spatial covector case
+                if read_covectors_from_axes_labels
+                    covector = parse_long_name(long_name)
+                    covectors[i,1:3] .= transpose(pinv(covector))
+                else
+                    # SQ TODO: Case where UB Matrix is available, but the energy axis isn't last.
+                    # Help req'd from Mantid: which spatial axis is which in that case?
+                    covectors[i,1:3] .= spatial_covectors[i,:]
                 end
             end
 
@@ -119,12 +126,22 @@ function load_nxs(filename)
             end
 
             binstart[i] = minimum(data_dims[i])
-            binend[i] = maximum(data_dims[i])
+
+            # Place end of bin in center of last bin, according to Sunny convention
+            binend[i] = maximum(data_dims[i]) - binwidth[i]/2
         end
 
-        covectors4D = [covectors [0;0;0]; [0 0 0] 1]
-        return BinningParameters(binstart,binend,binwidth,covectors4D), signal
+        return BinningParameters(binstart,binend,binwidth,covectors), signal
     end
+end
+
+function Base.permutedims(params::BinningParameters,perm)
+  out = copy(params)
+  out.covectors .= params.covectors[perm,:]
+  out.binwidth .= params.binwidth[perm]
+  out.binstart .= params.binstart[perm]
+  out.binend .= params.binend[perm]
+  out
 end
 
 # Parse the "[0.5H,0.3H,0.1H]" type of Mantid string describing

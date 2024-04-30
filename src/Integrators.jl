@@ -239,10 +239,12 @@ end
 
 @inline function rhs_dipole!(Δs, s, ξ, ∇E, integrator)
     (; Δt, λ) = integrator
-    if iszero(λ)
-        @. Δs = -s × (- Δt*∇E)
-    else
-        @. Δs = -s × (- Δt*∇E + ξ - Δt*λ*(s × ∇E))
+    for i = eachindex(Δs)
+        if iszero(λ)
+            Δs[i] = -s[i] × (- Δt*∇E[i])
+        else
+            Δs[i] = -s[i] × (- Δt*∇E[i] + ξ[i] - Δt*λ*(s[i] × ∇E[i]))
+        end
     end
 end
 
@@ -360,18 +362,24 @@ function step!(sys::System{0}, integrator::ImplicitMidpoint; max_iters=100)
 
     for _ in 1:max_iters
         # Current guess for midpoint ŝ
-        @. ŝ = normalize_dipole((s + s′)/2, sys.κs)
+        for i = eachindex(ŝ )
+            ŝ[i] = normalize_dipole((s[i] + s′[i])/2, sys.κs[i])
+        end
 
         set_energy_grad_dipoles!(∇E, ŝ, sys)
         rhs_dipole!(Δs, ŝ, ξ, ∇E, integrator)
 
-        @. s″ = s + Δs
+        for i = eachindex(s″)
+            s″[i] = s[i] + Δs[i]
+        end
 
         # If converged, then we can return
         if fast_isapprox(s′, s″; atol)
             # Normalization here should not be necessary in principle, but it
             # could be useful in practice for finite `atol`.
-            @. s = normalize_dipole(s″, sys.κs)
+            for i = eachindex(s)
+                s[i] = normalize_dipole(s″[i], sys.κs[i])
+            end
             return
         end
 

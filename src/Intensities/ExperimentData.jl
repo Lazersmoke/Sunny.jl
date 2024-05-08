@@ -47,7 +47,9 @@ function load_nxs(filename; field = "signal")
         try
           try
             w_matrix = file["MDHistoWorkspace"]["experiment0"]["logs"]["W_MATRIX"]["value"]
-            spatial_covectors .= reshape(w_matrix,3,3) # No transpose because stored as column
+
+            # Transpose to arrange axes labels as columns
+            spatial_covectors .= transpose(reshape(w_matrix,3,3))
           catch e
             printstyled("Warning",color=:yellow)
             print(": failed to load W_MATRIX from Mantid file $filename due to:\n")
@@ -132,7 +134,7 @@ function load_nxs(filename; field = "signal")
             binend[i] = maximum(data_dims[i]) - binwidth[i]/2
         end
 
-        covectors[spatial_covector_ixs,1:3] .= inv(transpose(spatial_covectors))
+        covectors[spatial_covector_ixs,1:3] .= inv(spatial_covectors)
 
         return BinningParameters(binstart,binend,binwidth,covectors), signal
     end

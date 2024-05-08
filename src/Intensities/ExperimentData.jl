@@ -104,6 +104,7 @@ function load_nxs(filename; field = "signal")
         binstart = Vector{Float64}(undef,4)
         binend = Vector{Float64}(undef,4)
         covectors = zeros(Float64,4,4)
+        spatial_covector_ixs = [0,0,0]
         std = x -> sqrt(sum((x .- sum(x) ./ length(x)).^2))
         for (i,name) in enumerate(axes_names)
             long_name = Dict(JLD2.load_attributes(file,"MDHistoWorkspace/data/$name"))[:long_name]
@@ -111,13 +112,11 @@ function load_nxs(filename; field = "signal")
             if long_name == "DeltaE"
                 covectors[i,:] .= [0,0,0,1] # energy covector
             else # spatial covector case
+                ix = findfirst(spatial_covector_ixs .== 0)
+                spatial_covector_ixs[ix] = i
                 if read_covectors_from_axes_labels
-                    covector = parse_long_name(long_name)
-                    covectors[i,1:3] .= transpose(pinv(covector))
-                else
-                    # SQ TODO: Case where UB Matrix is available, but the energy axis isn't last.
-                    # Help req'd from Mantid: which spatial axis is which in that case?
-                    covectors[i,1:3] .= spatial_covectors[i,:]
+                    lbl = parse_long_name(long_name)
+                    spatial_covectors[:,ix] .= lbl
                 end
             end
 
@@ -132,6 +131,8 @@ function load_nxs(filename; field = "signal")
             # Place end of bin in center of last bin, according to Sunny convention
             binend[i] = maximum(data_dims[i]) - binwidth[i]/2
         end
+
+        covectors[spatial_covector_ixs,1:3] .= inv(transpose(spatial_covectors))
 
         return BinningParameters(binstart,binend,binwidth,covectors), signal
     end
